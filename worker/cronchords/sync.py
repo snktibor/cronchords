@@ -154,10 +154,10 @@ class Syncer:
             )
 
     def _search(self, track: Track) -> CacheEntry:
-        videos = self.youtube.search(matching.search_query(track))
+        videos = self.youtube.search(matching.youtube_query(track))
         durations = self.youtube.durations([video.id for video in videos])
         videos = [replace(video, duration_s=durations.get(video.id)) for video in videos]
-        best = matching.best_match(track, videos)
+        best = matching.best_video(track, videos)
         if best is None:
             log.info("no good match on YouTube for %s", track)
         entry = CacheEntry(
