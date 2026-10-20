@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 from . import matching
-from .spotify import SpotifyClient, SpotifyError, Track
+from .spotify import PlaylistChangedError, SpotifyClient, SpotifyError, Track
 from .supabase import CacheEntry, Database, Mapping
 from .youtube import (
     QuotaExceededError,
@@ -75,8 +75,14 @@ class Syncer:
             )
             return
 
-        tracks, skipped = self.spotify.get_tracks(mapping.spotify_playlist_id)
-        tracks = _unique(tracks)
+        try:
+            tracks, skipped = self.spotify.get_tracks(mapping.spotify_playlist_id, snapshot_id)
+        except PlaylistChangedError as exc:
+            log.info("[%s] %s, trying again in the next run", mapping.label, exc)
+            return
+        # Without an ISRC there's nothing to look a track up by.
+        skipped += sum(1 for track in tracks if not track.isrc)
+        tracks = _unique([track for track in tracks if track.isrc])
         cache = self.db.get_cache_entries(track.isrc for track in tracks)
         on_youtube = {
             item.video.id for item in self.youtube.playlist_items(mapping.youtube_playlist_id)
