@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs
 
 import httpx
 
+from cronchords.__main__ import run
+from cronchords.supabase import Database
+
 SUPABASE_URL = "https://project.supabase.co"
 SUPABASE_KEY = "sb_secret_test"
+
+NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 
 
 def spotify_entry(
@@ -64,6 +71,18 @@ class FakeCloud:
     video_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Spotify playlist id -> {"snapshot_id": ..., "entries": [...]}
     spotify_playlists: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Spotify track id -> track object, for search results and adding by URI
+    spotify_catalog: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Spotify search query -> track ids, best first
+    spotify_search_results: dict[str, list[str]] = field(default_factory=dict)
+    # False: the token lacks the playlist-modify scopes
+    spotify_can_edit: bool = True
+    spotify_rate_limited: bool = False
+    # Called after a page of a Spotify playlist was served, to edit it mid-read
+    while_reading_spotify: Callable[[], None] | None = None
+    # Videos the next YouTube playlist listing skips, as paging does when the
+    # playlist changes meanwhile
+    skip_once: set[str] = field(default_factory=set)
     # YouTube playlist id -> video ids in playlist order
     youtube_playlists: dict[str, list[str]] = field(default_factory=dict)
     videos: dict[str, FakeVideo] = field(default_factory=dict)
@@ -107,6 +126,20 @@ class FakeCloud:
     ) -> None:
         self.videos[video_id] = FakeVideo(title, channel, duration)
         self.search_results.setdefault(query, []).append(video_id)
+
+    def add_track(self, query: str, entry: dict[str, Any]) -> None:
+        """Make a track findable with a Spotify search, and addable to playlists."""
+        self.spotify_catalog[entry["item"]["id"]] = entry["item"]
+        self.spotify_search_results.setdefault(query, []).append(entry["item"]["id"])
+
+    def spotify_track_ids(self, playlist_id: str) -> list[str]:
+        return [entry["item"]["id"] for entry in self.spotify_playlists[playlist_id]["entries"]]
+
+    def youtube_searches(self) -> list[str]:
+        return [r.url.params["q"] for r in self.calls("www.googleapis.com", "/youtube/v3/search")]
+
+    def spotify_searches(self) -> list[str]:
+        return [r.url.params["q"] for r in self.calls("api.spotify.com", "/v1/search")]
 
     def calls(self, host: str, path_prefix: str = "") -> list[httpx.Request]:
         return [
@@ -196,23 +229,59 @@ class FakeCloud:
 
     def _spotify_api(self, request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer spotify-access"
+        if self.spotify_rate_limited:
+            return httpx.Response(429, headers={"Retry-After": "3600"})
+        if request.url.path == "/v1/search":
+            assert request.url.params["type"] == "track"
+            limit = int(request.url.params["limit"])
+            assert limit <= 10
+            ids = self.spotify_search_results.get(request.url.params["q"], [])[:limit]
+            return httpx.Response(
+                200, json={"tracks": {"items": [self.spotify_catalog[i] for i in ids]}}
+            )
+
         match = re.fullmatch(r"/v1/playlists/([^/]+)(/items)?", request.url.path)
         playlist = self.spotify_playlists.get(match.group(1)) if match else None
         if playlist is None:
-            return httpx.Response(404, json={"error": {"status": 404, "message": "Not found"}})
+            return _spotify_error(404, "Not found")
         if not match.group(2):
             return httpx.Response(200, json={"snapshot_id": playlist["snapshot_id"]})
+
+        if request.method in ("POST", "DELETE"):
+            if not self.spotify_can_edit:
+                return _spotify_error(403, "Insufficient client scope")
+            body = json.loads(request.content)
+            if request.method == "POST":
+                assert len(body["uris"]) <= 100
+                track_ids = [uri.removeprefix("spotify:track:") for uri in body["uris"]]
+                playlist["entries"] += [
+                    {"is_local": False, "item": self.spotify_catalog[track_id]}
+                    for track_id in track_ids
+                ]
+            else:
+                assert len(body["items"]) <= 100
+                uris = {item["uri"] for item in body["items"]}
+                playlist["entries"] = [
+                    entry
+                    for entry in playlist["entries"]
+                    if f"spotify:track:{entry['item']['id']}" not in uris
+                ]
+            playlist["snapshot_id"] += "+"
+            status = 201 if request.method == "POST" else 200
+            return httpx.Response(status, json={"snapshot_id": playlist["snapshot_id"]})
+
         offset = int(request.url.params["offset"])
         limit = int(request.url.params["limit"])
         entries = playlist["entries"]
         has_more = offset + limit < len(entries)
-        return httpx.Response(
-            200,
-            json={
-                "items": entries[offset : offset + limit],
-                "next": f"{request.url}&more" if has_more else None,
-            },
-        )
+        page = {
+            "total": len(entries),
+            "items": entries[offset : offset + limit],
+            "next": f"{request.url}&more" if has_more else None,
+        }
+        if self.while_reading_spotify:
+            self.while_reading_spotify()
+        return httpx.Response(200, json=page)
 
     # Google / YouTube
 
@@ -271,6 +340,9 @@ class FakeCloud:
             playlist = self.youtube_playlists.get(playlist_id)
             if playlist is None:
                 return _youtube_error(404, "playlistNotFound")
+            if self.skip_once:
+                playlist = [vid for vid in playlist if vid not in self.skip_once]
+                self.skip_once = set()
             start = int(params.get("pageToken", 0))
             end = start + int(params["maxResults"])
             page: dict[str, Any] = {
@@ -309,6 +381,10 @@ class FakeCloud:
         return {"id": f"{playlist_id}/{video_id}", "snippet": snippet}
 
 
+def _spotify_error(status: int, message: str) -> httpx.Response:
+    return httpx.Response(status, json={"error": {"status": status, "message": message}})
+
+
 def _youtube_error(status: int, reason: str) -> httpx.Response:
     return httpx.Response(
         status,
@@ -320,3 +396,13 @@ def _youtube_error(status: int, reason: str) -> httpx.Response:
             }
         },
     )
+
+
+def sync(cloud: FakeCloud, now: datetime = NOW) -> int:
+    """Run the worker once against the fake cloud, return its exit code."""
+    db = Database(SUPABASE_URL, SUPABASE_KEY, transport=cloud.transport)
+    try:
+        with httpx.Client(transport=cloud.transport) as http:
+            return run(db, http, now=lambda: now)
+    finally:
+        db.close()

@@ -1,32 +1,13 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import httpx
 import pytest
-from fake_cloud import SUPABASE_KEY, SUPABASE_URL, FakeCloud, spotify_entry
+from fake_cloud import NOW, SUPABASE_KEY, SUPABASE_URL, FakeCloud, spotify_entry, sync
+from songs import DREAMS, GET_LUCKY, HEY_JUDE, RHAPSODY, stock
 
-from cronchords.__main__ import run, spotify_access_token
+from cronchords.__main__ import spotify_access_token
 from cronchords.spotify import SpotifyAuthError
 from cronchords.supabase import AppConfig, Database
-
-NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
-
-GET_LUCKY = spotify_entry("USQX91300108", "Get Lucky", "Daft Punk", 248_000)
-RHAPSODY = spotify_entry("GBUM71029604", "Bohemian Rhapsody - Remastered 2011", "Queen", 354_000)
-DREAMS = spotify_entry("USWB10002400", "Dreams", "Fleetwood Mac", 257_000)
-HEY_JUDE = spotify_entry("GBAYE0601690", "Hey Jude - Remastered 2015", "The Beatles", 431_000)
-
-
-def sync(cloud: FakeCloud, now: datetime = NOW) -> int:
-    db = Database(SUPABASE_URL, SUPABASE_KEY, transport=cloud.transport)
-    try:
-        with httpx.Client(transport=cloud.transport) as http:
-            return run(db, http, now=lambda: now)
-    finally:
-        db.close()
-
-
-def searched(cloud: FakeCloud) -> list[str]:
-    return [r.url.params["q"] for r in cloud.calls("www.googleapis.com", "/youtube/v3/search")]
 
 
 def change_playlist(cloud: FakeCloud, playlist_id: str, *entries: dict) -> None:
@@ -38,29 +19,12 @@ def change_playlist(cloud: FakeCloud, playlist_id: str, *entries: dict) -> None:
 @pytest.fixture
 def cloud() -> FakeCloud:
     cloud = FakeCloud()
+    stock(cloud, GET_LUCKY, RHAPSODY, DREAMS, HEY_JUDE)
     cloud.spotify_playlists["road-trip"] = {
         "snapshot_id": "snap-1",
-        "entries": [GET_LUCKY, RHAPSODY, DREAMS],
+        "entries": [GET_LUCKY.entry, RHAPSODY.entry, DREAMS.entry],
     }
     cloud.add_mapping("road-trip", "yt-road-trip")
-    cloud.add_video("Daft Punk - Get Lucky", "lucky", "Get Lucky", "Daft Punk - Topic", "PT4M8S")
-    cloud.add_video(
-        "Queen - Bohemian Rhapsody - Remastered 2011",
-        "rhapsody",
-        "Bohemian Rhapsody (Remastered 2011)",
-        "Queen - Topic",
-        "PT5M54S",
-    )
-    cloud.add_video(
-        "Fleetwood Mac - Dreams", "dreams", "Dreams", "Fleetwood Mac - Topic", "PT4M17S"
-    )
-    cloud.add_video(
-        "The Beatles - Hey Jude - Remastered 2015",
-        "jude",
-        "Hey Jude (Remastered 2015)",
-        "The Beatles - Topic",
-        "PT7M11S",
-    )
     return cloud
 
 
@@ -93,30 +57,30 @@ def test_unchanged_playlist_costs_no_youtube_quota(cloud):
 
 def test_only_songs_missing_from_the_cache_are_searched(cloud):
     sync(cloud)
-    change_playlist(cloud, "road-trip", HEY_JUDE)
+    change_playlist(cloud, "road-trip", HEY_JUDE.entry)
     cloud.requests.clear()
 
     assert sync(cloud) == 0
 
-    assert searched(cloud) == ["The Beatles - Hey Jude - Remastered 2015"]
+    assert cloud.youtube_searches() == ["The Beatles - Hey Jude - Remastered 2015"]
     assert cloud.youtube_playlists["yt-road-trip"] == ["lucky", "rhapsody", "dreams", "jude"]
 
 
 def test_cache_is_shared_between_playlists(cloud):
     sync(cloud)
-    cloud.spotify_playlists["favourites"] = {"snapshot_id": "fav-1", "entries": [GET_LUCKY]}
+    cloud.spotify_playlists["favourites"] = {"snapshot_id": "fav-1", "entries": [GET_LUCKY.entry]}
     cloud.add_mapping("favourites", "yt-favourites")
     cloud.requests.clear()
 
     assert sync(cloud) == 0
 
-    assert searched(cloud) == []
+    assert cloud.youtube_searches() == []
     assert cloud.youtube_playlists["yt-favourites"] == ["lucky"]
 
 
 def test_videos_already_in_the_playlist_are_not_added_again(cloud):
     cloud.youtube_playlists["yt-road-trip"] = ["rhapsody"]
-    cloud.spotify_playlists["road-trip"]["entries"].append(GET_LUCKY)
+    cloud.spotify_playlists["road-trip"]["entries"].append(GET_LUCKY.entry)
 
     assert sync(cloud) == 0
 
@@ -128,11 +92,16 @@ def test_tracks_that_cannot_be_matched_are_skipped(cloud):
     episode["item"]["type"] = "episode"
     local_file = {"is_local": True, "item": {"type": "track", "id": None, "name": "Demo"}}
     no_isrc = spotify_entry(None, "Unreleased", "Someone")
-    cloud.spotify_playlists["road-trip"]["entries"] = [episode, GET_LUCKY, local_file, no_isrc]
+    cloud.spotify_playlists["road-trip"]["entries"] = [
+        episode,
+        GET_LUCKY.entry,
+        local_file,
+        no_isrc,
+    ]
 
     assert sync(cloud) == 0
 
-    assert searched(cloud) == ["Daft Punk - Get Lucky"]
+    assert cloud.youtube_searches() == ["Daft Punk - Get Lucky"]
     assert cloud.youtube_playlists["yt-road-trip"] == ["lucky"]
 
 
@@ -154,7 +123,7 @@ def test_large_playlists_are_paged(cloud):
 
     assert len(cloud.calls("api.spotify.com", "/v1/playlists/road-trip/items")) == 3
     assert len(cloud.calls("www.googleapis.com", "/youtube/v3/playlistItems")) == 3
-    assert searched(cloud) == []
+    assert cloud.youtube_searches() == []
     assert cloud.mappings[0]["spotify_snapshot_id"] == "snap-1"
 
 
@@ -172,7 +141,7 @@ def test_search_limit_pauses_the_sync_until_the_next_run(cloud):
     cloud.requests.clear()
     assert sync(cloud) == 0
 
-    assert searched(cloud) == ["Fleetwood Mac - Dreams"]
+    assert cloud.youtube_searches() == ["Fleetwood Mac - Dreams"]
     assert cloud.youtube_playlists["yt-road-trip"] == ["lucky", "rhapsody", "dreams"]
     assert mapping["spotify_snapshot_id"] == "snap-1"
     assert mapping["last_error"] is None
@@ -180,7 +149,10 @@ def test_search_limit_pauses_the_sync_until_the_next_run(cloud):
 
 def test_cached_songs_are_still_added_after_the_search_limit_is_hit(cloud):
     sync(cloud)
-    cloud.spotify_playlists["favourites"] = {"snapshot_id": "fav-1", "entries": [HEY_JUDE, DREAMS]}
+    cloud.spotify_playlists["favourites"] = {
+        "snapshot_id": "fav-1",
+        "entries": [HEY_JUDE.entry, DREAMS.entry],
+    }
     cloud.add_mapping("favourites", "yt-favourites")
     cloud.searches_left = 0
 
@@ -191,7 +163,7 @@ def test_cached_songs_are_still_added_after_the_search_limit_is_hit(cloud):
 
 
 def test_running_out_of_quota_stops_the_run(cloud):
-    cloud.spotify_playlists["favourites"] = {"snapshot_id": "fav-1", "entries": [GET_LUCKY]}
+    cloud.spotify_playlists["favourites"] = {"snapshot_id": "fav-1", "entries": [GET_LUCKY.entry]}
     cloud.add_mapping("favourites", "yt-favourites")
     # Listing the playlist, then one lookup and one insert; the second insert fails.
     cloud.units_left = 1 + 1 + 50 + 1
@@ -209,7 +181,7 @@ def test_running_out_of_quota_stops_the_run(cloud):
     cloud.requests.clear()
     assert sync(cloud) == 0
 
-    assert searched(cloud) == ["Fleetwood Mac - Dreams"]
+    assert cloud.youtube_searches() == ["Fleetwood Mac - Dreams"]
     assert cloud.youtube_playlists["yt-road-trip"] == ["lucky", "rhapsody", "dreams"]
     assert cloud.youtube_playlists["yt-favourites"] == ["lucky"]
 
@@ -241,23 +213,23 @@ def test_unmatched_songs_are_searched_again_after_a_while(cloud):
     assert cloud.cache["USWB10002400"]["youtube_video_id"] is None
     assert cloud.mappings[0]["spotify_snapshot_id"] == "snap-1"
 
-    change_playlist(cloud, "road-trip", HEY_JUDE)
+    change_playlist(cloud, "road-trip", HEY_JUDE.entry)
     cloud.requests.clear()
     sync(cloud, now=NOW + timedelta(days=1))
-    assert searched(cloud) == ["The Beatles - Hey Jude - Remastered 2015"]
+    assert cloud.youtube_searches() == ["The Beatles - Hey Jude - Remastered 2015"]
 
     cloud.search_results["Fleetwood Mac - Dreams"] = ["dreams"]
     change_playlist(cloud, "road-trip")
     cloud.requests.clear()
     sync(cloud, now=NOW + timedelta(days=31))
-    assert searched(cloud) == ["Fleetwood Mac - Dreams"]
+    assert cloud.youtube_searches() == ["Fleetwood Mac - Dreams"]
     assert cloud.youtube_playlists["yt-road-trip"][-1] == "dreams"
 
 
 def test_removed_videos_are_forgotten(cloud):
     sync(cloud)
     cloud.videos["dreams"].removed = True
-    cloud.spotify_playlists["favourites"] = {"snapshot_id": "fav-1", "entries": [DREAMS]}
+    cloud.spotify_playlists["favourites"] = {"snapshot_id": "fav-1", "entries": [DREAMS.entry]}
     cloud.add_mapping("favourites", "yt-favourites")
 
     assert sync(cloud) == 0
