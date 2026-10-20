@@ -2,8 +2,10 @@ import httpx
 import pytest
 
 from cronchords.youtube import (
+    PlaylistItem,
     QuotaExceededError,
     SearchQuotaExceededError,
+    Video,
     YouTubeAuthError,
     YouTubeClient,
     parse_duration,
@@ -45,7 +47,7 @@ def test_search_quota_is_told_apart_from_the_shared_quota():
     with pytest.raises(SearchQuotaExceededError):
         youtube.search("anything")
     with pytest.raises(QuotaExceededError):
-        youtube.playlist_video_ids("PL1")
+        youtube.playlist_items("PL1")
 
 
 def test_search_results_are_unescaped():
@@ -74,15 +76,44 @@ def test_search_results_are_unescaped():
 
 def test_quota_usage_is_counted():
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"items": []})
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        return httpx.Response(200, json={"id": "item", "items": []})
 
     youtube = client(handler)
     youtube.search("a")
     youtube.durations(["x", "y"])
     youtube.add_to_playlist("PL1", "x")
+    youtube.remove_from_playlist("item")
 
     assert youtube.searches == 1
-    assert youtube.units_used == 51
+    assert youtube.units_used == 101
+
+
+def test_playlist_items_name_the_uploader():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["part"] == "snippet"
+        snippet = {"title": "Dreams", "resourceId": {"videoId": "dreams"}}
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "id": "i1",
+                        "snippet": snippet | {"videoOwnerChannelTitle": "Fleetwood Mac - Topic"},
+                    },
+                    {
+                        "id": "i2",
+                        "snippet": {"title": "Deleted video", "resourceId": {"videoId": "gone"}},
+                    },
+                ]
+            },
+        )
+
+    dreams, deleted = client(handler).playlist_items("PL1")
+
+    assert dreams == PlaylistItem("i1", Video("dreams", "Dreams", "Fleetwood Mac - Topic"))
+    assert deleted.video.channel == ""
 
 
 def test_revoked_refresh_token():
