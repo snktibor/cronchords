@@ -68,17 +68,19 @@ def run(
     mask(spotify_token, youtube_token)
     warn_if_spotify_expires_soon(config, now())
 
+    sp = spotify.SpotifyClient(http, spotify_token)
     yt = youtube.YouTubeClient(http, youtube_token)
-    syncer = Syncer(db, spotify.SpotifyClient(http, spotify_token), yt, now=now)
-    result = syncer.run(mappings)
+    result = Syncer(db, sp, yt, now=now).run(mappings)
 
     log.info(
-        "Done: %d of %d playlist(s) synced, %d failed. YouTube quota used: ~%d units, %d searches.",
+        "Done: %d of %d playlist(s) synced, %d failed. YouTube quota used: ~%d units, "
+        "%d searches. Spotify searches: %d.",
         result.synced,
         len(mappings),
         result.failed,
         yt.units_used,
         yt.searches,
+        sp.searches,
     )
     return 1 if result.failed else 0
 
