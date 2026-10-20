@@ -12,7 +12,12 @@ import type { Playlist } from './util'
 const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize'
 const TOKEN_URL = 'https://accounts.spotify.com/api/token'
 const API_URL = 'https://api.spotify.com/v1'
-const SCOPES = 'playlist-read-private playlist-read-collaborative'
+const SCOPES = [
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'playlist-modify-private',
+  'playlist-modify-public',
+].join(' ')
 
 interface Page<T> {
   items: (T | null)[]
@@ -50,11 +55,11 @@ export async function finishSpotifyConnection(code: string, verifier: string): P
 /** Playlists the sync can read: since February 2026 only your own and collaborative ones. */
 export async function listSpotifyPlaylists(): Promise<Playlist[]> {
   const token = await accessToken()
-  const me = await get<{ id: string }>(`${API_URL}/me`, token)
+  const me = await call<{ id: string }>(`${API_URL}/me`, token)
   const playlists: Playlist[] = []
   let url: string | null = `${API_URL}/me/playlists?limit=50`
   while (url) {
-    const page: Page<SpotifyPlaylist> = await get(url, token)
+    const page: Page<SpotifyPlaylist> = await call(url, token)
     for (const playlist of page.items) {
       if (playlist && (playlist.owner.id === me.id || playlist.collaborative)) {
         playlists.push({ id: playlist.id, name: playlist.name })
@@ -63,6 +68,15 @@ export async function listSpotifyPlaylists(): Promise<Playlist[]> {
     url = page.next
   }
   return playlists
+}
+
+export async function createSpotifyPlaylist(name: string): Promise<Playlist> {
+  const token = await accessToken()
+  const playlist = await call<SpotifyPlaylist>(`${API_URL}/me/playlists`, token, {
+    method: 'POST',
+    body: JSON.stringify({ name, public: false, description: 'Synced with YouTube by cronchords' }),
+  })
+  return { id: playlist.id, name: playlist.name }
 }
 
 async function accessToken(): Promise<string> {
@@ -95,8 +109,14 @@ async function refreshAccessToken(): Promise<string> {
   return token.access_token
 }
 
-async function get<T>(url: string, token: string): Promise<T> {
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!response.ok) throw new Error(`Spotify API error ${response.status}`)
+async function call<T>(url: string, token: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    throw new Error(data?.error?.message ?? `Spotify API error ${response.status}`)
+  }
   return response.json()
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { removeMapping, type PlaylistMapping } from '../lib/db'
-import { errorMessage, formatDate } from '../lib/util'
+import { DIRECTIONS, errorMessage, formatDate } from '../lib/util'
 
 export function Mappings({
   mappings,
@@ -31,6 +31,9 @@ export function Mappings({
           <thead>
             <tr>
               <th>Spotify</th>
+              <th>
+                <span className="visually-hidden">Direction</span>
+              </th>
               <th>YouTube</th>
               <th>Last synced</th>
               <th />
@@ -47,6 +50,10 @@ export function Mappings({
                   >
                     {mapping.spotify_playlist_name ?? mapping.spotify_playlist_id}
                   </a>
+                </td>
+                <td title={DIRECTIONS[mapping.direction].label}>
+                  <span aria-hidden="true">{DIRECTIONS[mapping.direction].arrow}</span>
+                  <span className="visually-hidden">{DIRECTIONS[mapping.direction].label}</span>
                 </td>
                 <td>
                   <a
