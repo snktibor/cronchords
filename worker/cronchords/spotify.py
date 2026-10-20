@@ -15,8 +15,14 @@ API_URL = "https://api.spotify.com/v1"
 
 # Since the February 2026 API changes playlist entries live under /items and
 # each entry holds its track in "item" (it used to be "track").
-ITEM_FIELDS = "next,items(is_local,item(type,id,name,duration_ms,external_ids(isrc),artists(name)))"
+ITEM_FIELDS = (
+    "total,next,items(is_local,item(type,id,name,duration_ms,external_ids(isrc),artists(name)))"
+)
 PAGE_SIZE = 50
+# Adding and removing takes at most 100 tracks per request.
+WRITE_BATCH = 100
+# Also since February 2026, search returns at most 10 results.
+SEARCH_LIMIT = 10
 
 
 class SpotifyError(Exception):
@@ -27,10 +33,18 @@ class SpotifyAuthError(SpotifyError):
     """The stored refresh token stopped working, Spotify has to be reconnected."""
 
 
+class SpotifyRateLimitError(SpotifyError):
+    """Spotify wants the app to back off for longer than a run should wait."""
+
+
+class PlaylistChangedError(SpotifyError):
+    """The playlist changed while it was being read, so the read can't be trusted."""
+
+
 @dataclass(frozen=True)
 class Track:
     id: str
-    isrc: str
+    isrc: str | None
     name: str
     artists: tuple[str, ...]
     duration_ms: int
@@ -82,64 +96,114 @@ class SpotifyClient:
     def __init__(self, http: httpx.Client, access_token: str):
         self._http = http
         self._headers = {"Authorization": f"Bearer {access_token}"}
+        self.searches = 0
 
     def get_snapshot_id(self, playlist_id: str) -> str:
-        return self._get(f"/playlists/{playlist_id}", {"fields": "snapshot_id"})["snapshot_id"]
+        playlist = self._call("GET", f"/playlists/{playlist_id}", params={"fields": "snapshot_id"})
+        return playlist["snapshot_id"]
 
-    def get_tracks(self, playlist_id: str) -> tuple[list[Track], int]:
-        """Return the playlist's tracks and how many entries had to be skipped.
+    def get_tracks(self, playlist_id: str, snapshot_id: str) -> tuple[list[Track], int]:
+        """Return the tracks of the playlist at snapshot_id, and how many entries were skipped.
 
-        Local files, podcast episodes and tracks without an ISRC can't be
-        matched, so they are left out.
+        Local files and podcast episodes can't be synced, so they are left out.
+        Raises PlaylistChangedError if the playlist moved on from snapshot_id:
+        paging through a playlist that changes meanwhile can skip entries, and
+        a two-way sync would take a skipped song for a removed one.
         """
         tracks: list[Track] = []
         skipped = 0
         offset = 0
         while True:
-            page = self._get(
+            page = self._call(
+                "GET",
                 f"/playlists/{playlist_id}/items",
-                {"fields": ITEM_FIELDS, "limit": PAGE_SIZE, "offset": offset},
+                params={"fields": ITEM_FIELDS, "limit": PAGE_SIZE, "offset": offset},
             )
             for entry in page.get("items") or []:
-                track = _parse_track(entry)
+                track = None if entry.get("is_local") else _parse_track(entry.get("item"))
                 if track:
                     tracks.append(track)
                 else:
                     skipped += 1
             if not page.get("next"):
-                return tracks, skipped
+                break
             offset += PAGE_SIZE
 
-    def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
-        response = send(self._http, "GET", f"{API_URL}{path}", params=params, headers=self._headers)
-        if response.status_code in (403, 404):
-            raise SpotifyError(
-                "Spotify playlist not found or not accessible. Only playlists you own "
-                "or collaborate on can be synced."
+        if (
+            page.get("total") not in (None, len(tracks) + skipped)
+            or self.get_snapshot_id(playlist_id) != snapshot_id
+        ):
+            raise PlaylistChangedError("The Spotify playlist changed while it was being read")
+        return tracks, skipped
+
+    def search(self, query: str) -> list[Track]:
+        self.searches += 1
+        body = self._call(
+            "GET", "/search", params={"q": query, "type": "track", "limit": SEARCH_LIMIT}
+        )
+        items = (body.get("tracks") or {}).get("items") or []
+        return [track for track in map(_parse_track, items) if track]
+
+    def add_tracks(self, playlist_id: str, track_ids: list[str]) -> None:
+        for batch in _batches(track_ids):
+            uris = [f"spotify:track:{track_id}" for track_id in batch]
+            self._call("POST", f"/playlists/{playlist_id}/items", json={"uris": uris})
+
+    def remove_tracks(self, playlist_id: str, track_ids: list[str]) -> None:
+        """Remove every occurrence of the tracks from the playlist."""
+        for batch in _batches(track_ids):
+            items = [{"uri": f"spotify:track:{track_id}"} for track_id in batch]
+            self._call("DELETE", f"/playlists/{playlist_id}/items", json={"items": items})
+
+    def _call(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        response = send(self._http, method, f"{API_URL}{path}", headers=self._headers, **kwargs)
+        if response.is_success:
+            return response.json() if response.content else {}
+
+        message = _api_error(response)
+        if response.status_code == 429:
+            raise SpotifyRateLimitError(
+                "Spotify is limiting requests for a while, the sync continues in a later run."
             )
-        if not response.is_success:
-            raise SpotifyError(f"Spotify API error {response.status_code}: {response.text[:300]}")
-        return response.json()
+        if path.startswith("/playlists/"):
+            if response.status_code == 404 or (response.status_code == 403 and method == "GET"):
+                raise SpotifyError(
+                    "Spotify playlist not found or not accessible. Only playlists you own "
+                    "or collaborate on can be synced."
+                )
+            if response.status_code == 403:
+                raise SpotifyError(
+                    f"Spotify didn't allow changing the playlist ({message}). Reconnect Spotify "
+                    "in the dashboard so that cronchords may edit your playlists."
+                )
+        raise SpotifyError(f"Spotify API error {response.status_code}: {message}")
 
 
 def normalize_isrc(value: str | None) -> str:
     return re.sub(r"[^A-Z0-9]", "", (value or "").upper())
 
 
-def _parse_track(entry: dict[str, Any]) -> Track | None:
-    item = entry.get("item")
-    if entry.get("is_local") or not isinstance(item, dict) or item.get("type") != "track":
-        return None
-    isrc = normalize_isrc((item.get("external_ids") or {}).get("isrc"))
-    if not isrc or not item.get("id"):
+def _parse_track(item: Any) -> Track | None:
+    if not isinstance(item, dict) or item.get("type") != "track" or not item.get("id"):
         return None
     return Track(
         id=item["id"],
-        isrc=isrc,
+        isrc=normalize_isrc((item.get("external_ids") or {}).get("isrc")) or None,
         name=item.get("name") or "",
         artists=tuple(a["name"] for a in item.get("artists") or [] if a.get("name")),
         duration_ms=item.get("duration_ms") or 0,
     )
+
+
+def _batches(track_ids: list[str]) -> list[list[str]]:
+    return [track_ids[i : i + WRITE_BATCH] for i in range(0, len(track_ids), WRITE_BATCH)]
+
+
+def _api_error(response: httpx.Response) -> str:
+    try:
+        return response.json()["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        return response.text[:300]
 
 
 def _oauth_error(response: httpx.Response) -> str | None:
