@@ -1,8 +1,8 @@
 # cronchords
 
-Keeps YouTube Music playlists in sync with your Spotify playlists. Every hour a
-GitHub Actions job checks your Spotify playlists and adds new songs to their
-YouTube counterparts.
+Keeps Spotify and YouTube Music playlists in sync: from Spotify to YouTube,
+from YouTube to Spotify, or both ways. Every hour a GitHub Actions job checks
+the playlists you paired up and carries the changes over to the other side.
 
 Everything runs on free tiers and on your own API keys: GitHub Actions for the
 sync, a Supabase database for its state, and a static dashboard that you can
@@ -13,51 +13,85 @@ host on GitHub Pages or Vercel. There is no server to run or pay for.
 ```mermaid
 flowchart LR
     dashboard["Dashboard<br>(static site)"] -- "settings,<br>playlist pairs" --> db[("Supabase")]
-    worker["Worker<br>(GitHub Actions, hourly)"] -- "tokens, sync state,<br>ISRC cache" --> db
-    worker -- "read playlists" --> spotify["Spotify"]
-    worker -- "search, add videos" --> youtube["YouTube"]
+    worker["Worker<br>(GitHub Actions, hourly)"] -- "tokens, sync state,<br>match caches" --> db
+    worker -- "search, add and<br>remove songs" --> spotify["Spotify"]
+    worker -- "search, add and<br>remove videos" --> youtube["YouTube"]
 ```
 
 - `web/` is the dashboard, a small React app. You use it to connect your
   Spotify and YouTube accounts and to pick which playlists to sync.
 - `supabase/` holds the database schema: one row of settings and tokens, the
-  playlist pairs, and a cache that maps songs (by ISRC) to YouTube videos.
+  playlist pairs, and two caches, one that maps Spotify songs (by ISRC) to
+  YouTube videos and one for the other way round.
 - `worker/` is the Python script the hourly workflow runs.
 
 On each run the worker:
 
 1. Gets fresh Spotify and YouTube access tokens.
-2. Compares each Spotify playlist's `snapshot_id` with the one from the last
-   sync. If it hasn't changed, the playlist is skipped and no YouTube quota is
-   spent.
-3. If it has changed, reads the tracks and looks up their ISRC codes in the
-   cache. Only songs that were never searched for go to YouTube search.
-4. Picks the best search result. Uploads from "Artist - Topic" channels are
-   preferred, since those are the actual album tracks and show up as songs in
-   YouTube Music. Title, artist and length have to match, and covers, live
-   versions, remixes and the like are skipped unless the Spotify track is one
-   too.
-5. Adds the songs that are missing from the YouTube playlist, saving every
-   match to the cache right away. Once the whole playlist is done, the new
-   `snapshot_id` is stored.
+2. Checks every pair for changes since the last sync. Spotify playlists have a
+   `snapshot_id` that changes with every edit. YouTube playlists have nothing
+   like it, so for pairs that sync from YouTube the worker lists the videos and
+   compares them with the last run. Pairs without changes are skipped.
+3. Finds the counterpart of every song that is new on one side:
+   - For a Spotify track, it looks up the ISRC in the cache, and only searches
+     YouTube for songs it hasn't seen before. Uploads from "Artist - Topic"
+     channels are preferred, since those are the actual album tracks and show
+     up as songs in YouTube Music.
+   - For a YouTube video, it first checks whether the song is on the Spotify
+     playlist already (maybe as another release), and otherwise searches
+     Spotify with the video's title, cleaned of "(Official Video)" and the
+     like.
 
-The sync is one-way and only adds songs: removing a song on Spotify does not
-remove it from YouTube.
+   Title, artist and length have to match, and covers, live versions, remixes
+   and the like only match each other.
+4. Adds the songs that are missing on the other side, saving every match to
+   the cache right away. Once a pair is done, the new snapshot is stored.
+5. For pairs that sync both ways, it also removes songs, see below.
+
+### Sync directions
+
+Every pair of playlists has a direction, which you pick when you create it:
+
+- **Spotify → YouTube** and **YouTube → Spotify** copy new songs over and never
+  remove anything. If you remove a song on the receiving side, it's added back
+  in a later run.
+- **Both ways** copies new songs from either side to the other, and when you
+  remove a song on one side, it's removed on the other side too. To tell the
+  two apart, the worker remembers which songs were on both sides after the
+  last run. If a playlist suddenly comes back empty, nothing is removed and the
+  dashboard shows a warning instead, in case that was a glitch. A playlist that
+  syncs both ways can't be part of another pair, since the pairs would pass
+  each other's removals on.
+
+Songs that have no match on the other side stay where they are. When a video
+on YouTube gets deleted or made private, the worker looks for another upload of
+the song, and you can remove the dead entry from the playlist without the song
+disappearing from Spotify.
 
 ## Limits
 
 - **YouTube quota.** A Google Cloud project gets 100 searches and 10,000 other
-  units a day. Adding a song to a playlist costs 50 units, so about 100 new
-  songs can be synced per day. A big playlist takes a few days the first
-  time; the worker continues where it stopped once the quota resets at
+  units a day. Adding a song to a YouTube playlist costs 50 units, so about 100
+  new songs can go to YouTube per day. A big playlist takes a few days the
+  first time; the worker continues where it stopped once the quota resets at
   midnight Pacific time. Songs already in the cache don't need a search, so the
-  same song in a second playlist only costs the 50 units. You can ask Google
-  for more quota if you need it.
+  same song in a second playlist only costs the 50 units. Removing a song from
+  YouTube costs 50 units as well. Pairs that sync from YouTube also list their
+  YouTube playlist on every run, which costs 1 unit per 50 videos, so about 24
+  units a day for a playlist of up to 50 songs. You can ask Google for more
+  quota if you need it.
 - **Spotify.** Apps in Development Mode need an owner with Spotify Premium, and
-  can only read playlists you own or collaborate on. Spotify refresh tokens
-  expire six months after connecting, so you have to reconnect Spotify twice a
-  year. The dashboard shows when, and the worker warns two weeks ahead.
-- Local files, podcast episodes and tracks without an ISRC are skipped.
+  can only read and change playlists you own or collaborate on. Searching
+  Spotify has no daily limit, so songs from YouTube aren't held back by a
+  quota. Spotify refresh tokens expire six months after connecting, so you have
+  to reconnect Spotify twice a year. The dashboard shows when, and the worker
+  warns two weeks ahead.
+- **Matching.** Spotify tracks carry an ISRC, YouTube videos don't, so songs
+  coming from YouTube are matched by title, artist and length alone. Topic
+  uploads and official videos match well; lyric videos, fan uploads and
+  unusual titles may find no match and are left out.
+- Local files and podcast episodes are skipped, and so are deleted and private
+  YouTube videos.
 - GitHub disables scheduled workflows in public repositories after 60 days
   without repository activity. If that happens, re-enable the Sync workflow
   from the Actions tab.
@@ -81,10 +115,10 @@ Vercel, since GitHub Pages needs a public repository on the free plan).
 ### 2. Create the Supabase project
 
 1. Create a free project on [supabase.com](https://supabase.com).
-2. Open the SQL Editor, paste in
-   [`supabase/migrations/20261020120000_initial_schema.sql`](supabase/migrations/20261020120000_initial_schema.sql)
-   and run it. If you use the Supabase CLI, `supabase link` and
-   `supabase db push` do the same.
+2. Open the SQL Editor and run the files in
+   [`supabase/migrations`](supabase/migrations) one after the other, oldest
+   first: paste one in, run it, then the next. If you use the Supabase CLI,
+   `supabase link` and `supabase db push` do the same.
 3. Under Authentication > Users, add a user with your email and a password
    ("Create new user", with "Auto Confirm User" checked). This is the login for
    the dashboard. Only the first user of the project can see or change
@@ -157,8 +191,9 @@ enough.
 2. Paste the Spotify client ID and click "Connect Spotify".
 3. Paste the Google client ID and secret and click "Connect YouTube". Choose the
    account (or brand channel) whose playlists you want to fill.
-4. Under "New sync", pick a Spotify playlist and a YouTube playlist, or let the
-   dashboard create a private YouTube playlist with the same name.
+4. Under "New sync", pick a Spotify playlist, a direction and a YouTube
+   playlist. The dashboard can also create a private playlist with the same
+   name on the receiving side.
 
 ### 7. Turn on the hourly sync
 
@@ -181,11 +216,21 @@ and to the secret key.
   every week, the OAuth app is still in "Testing" (step 5.3).
 - **"Waiting for the YouTube API quota to reset"** or **"song(s) still to
   sync"**: the daily quota ran out. Nothing to do, the next runs continue.
+- **"Spotify didn't allow changing the playlist"**: reconnect Spotify in the
+  dashboard. Connections made before cronchords could sync to Spotify only
+  allowed reading playlists.
 - **A song was matched to the wrong video**: in the Supabase table editor, find
   the song's row in `track_sync_cache` and put the right video ID in
   `youtube_video_id` (or clear it to skip the song), then remove the wrong video
   from the YouTube playlist. The right one is added the next time that Spotify
-  playlist changes.
+  playlist changes. For a pair that syncs both ways, add the right video to the
+  YouTube playlist first and remove the wrong one after: removing it alone
+  would remove the song from Spotify too.
+- **A video was matched to the wrong Spotify track**: the same, in
+  `video_sync_cache`: put the right track ID (the part after `/track/` in the
+  song's Spotify link) in `spotify_track_id`, or clear it to skip the video.
+  Then remove the wrong track from the Spotify playlist, or, for a pair that
+  syncs both ways, add the right track first and then remove the wrong one.
 
 ## Development
 
