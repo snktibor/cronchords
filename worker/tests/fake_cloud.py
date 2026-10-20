@@ -61,6 +61,7 @@ class FakeCloud:
     )
     mappings: list[dict[str, Any]] = field(default_factory=list)
     cache: dict[str, dict[str, Any]] = field(default_factory=dict)
+    video_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Spotify playlist id -> {"snapshot_id": ..., "entries": [...]}
     spotify_playlists: dict[str, dict[str, Any]] = field(default_factory=dict)
     # YouTube playlist id -> video ids in playlist order
@@ -77,13 +78,22 @@ class FakeCloud:
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
 
-    def add_mapping(self, spotify_id: str, youtube_id: str, **fields: Any) -> dict[str, Any]:
+    def add_mapping(
+        self,
+        spotify_id: str,
+        youtube_id: str,
+        direction: str = "spotify_to_youtube",
+        **fields: Any,
+    ) -> dict[str, Any]:
         mapping = {
             "id": f"mapping-{len(self.mappings) + 1}",
             "spotify_playlist_id": spotify_id,
             "spotify_playlist_name": spotify_id.title(),
             "youtube_playlist_id": youtube_id,
+            "direction": direction,
             "spotify_snapshot_id": None,
+            "youtube_snapshot_id": None,
+            "synced_songs": [],
             "last_synced_at": None,
             "last_error": None,
             **fields,
@@ -143,13 +153,24 @@ class FakeCloud:
                     mapping.update(body)
             return httpx.Response(204)
 
-        if table == "track_sync_cache":
+        if table in ("track_sync_cache", "video_sync_cache"):
+            rows, key = (
+                (self.cache, "isrc")
+                if table == "track_sync_cache"
+                else (self.video_cache, "youtube_video_id")
+            )
             if request.method == "GET":
-                isrcs = re.fullmatch(r"in\.\((.*)\)", params["isrc"]).group(1).split(",")
-                return httpx.Response(200, json=[self.cache[i] for i in isrcs if i in self.cache])
+                [(column, condition)] = [(k, v) for k, v in params.items() if k != "select"]
+                wanted = re.fullmatch(r"in\.\((.*)\)", condition).group(1).split(",")
+                return httpx.Response(
+                    200, json=[row for row in rows.values() if row[column] in wanted]
+                )
             if request.method == "POST":
-                assert "merge-duplicates" in request.headers["Prefer"]
-                self.cache[body["isrc"]] = body
+                prefer = request.headers["Prefer"]
+                if "merge-duplicates" in prefer or body[key] not in rows:
+                    rows[body[key]] = body
+                else:
+                    assert "ignore-duplicates" in prefer
                 return httpx.Response(201)
 
         raise AssertionError(f"unexpected Supabase call {request.method} {request.url}")

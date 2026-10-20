@@ -1,7 +1,9 @@
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 
-from cronchords.supabase import Database, DatabaseError
+from cronchords.supabase import CacheEntry, Database, DatabaseError, Direction
 
 
 def database(handler, key: str = "sb_secret_abc") -> Database:
@@ -61,3 +63,63 @@ def test_missing_config_row_points_at_the_likely_cause():
 
     with pytest.raises(DatabaseError, match="secret key"):
         database(handler).get_config()
+
+
+def test_mappings_know_their_direction_and_synced_songs():
+    def handler(request: httpx.Request) -> httpx.Response:
+        row = {
+            "id": "m1",
+            "spotify_playlist_id": "sp",
+            "youtube_playlist_id": "yt",
+            "direction": "both",
+            "spotify_snapshot_id": None,
+            "youtube_snapshot_id": None,
+            "synced_songs": [["track", "video"]],
+            "spotify_playlist_name": "Road Trip",
+        }
+        return httpx.Response(200, json=[row])
+
+    [mapping] = database(handler).get_mappings()
+
+    assert mapping.direction is Direction.BOTH
+    assert mapping.to_spotify and mapping.to_youtube
+    assert mapping.synced_songs == frozenset({("track", "video")})
+
+
+def test_videos_can_be_looked_up_by_the_tracks_they_were_matched_to():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params["youtube_video_id"])
+        row = {
+            "isrc": "GBUM71029604",
+            "spotify_track_id": "t1",
+            "youtube_video_id": "v1",
+            "searched_at": "2026-10-20T12:00:00+00:00",
+        }
+        return httpx.Response(
+            200, json=[row, row | {"isrc": "GBUM70000000", "spotify_track_id": "t2"}]
+        )
+
+    entries = database(handler).get_cache_entries_for_videos(["v1", "v2"])
+
+    assert seen == ["in.(v1,v2)"]
+    assert [entry.spotify_track_id for entry in entries["v1"]] == ["t1", "t2"]
+
+
+def test_cache_entries_can_be_added_without_overwriting():
+    prefer = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        prefer.append(request.headers["Prefer"])
+        return httpx.Response(201)
+
+    entry = CacheEntry("GBUM71029604", "t1", "v1", datetime(2026, 10, 20, tzinfo=UTC))
+    db = database(handler)
+    db.save_cache_entry(entry)
+    db.save_cache_entry(entry, overwrite=False)
+
+    assert prefer == [
+        "resolution=merge-duplicates,return=minimal",
+        "resolution=ignore-duplicates,return=minimal",
+    ]
