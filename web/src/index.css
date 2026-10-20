@@ -1,0 +1,53 @@
+/* Bare-bones layout, the real design is still to come. */
+
+:root {
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color-scheme: light dark;
+}
+
+body {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+section {
+  margin-block: 2rem;
+}
+
+label {
+  display: block;
+  margin-block: 0.5rem;
+}
+
+input,
+select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 28rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.4rem;
+  border-bottom: 1px solid #8884;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ok {
+  color: #1a7f37;
+}
+
+.missing,
+.warning,
+[role='alert'] {
+  color: #c4314b;
+}
