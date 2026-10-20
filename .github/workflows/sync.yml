@@ -1,0 +1,43 @@
+name: Sync
+
+on:
+  schedule:
+    # Hourly, a bit after the full hour when GitHub's scheduler is less busy.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+# Two runs at once would both rotate the Spotify refresh token and could add
+# the same songs twice.
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    # Skipped until the repository is set up, see the README.
+    if: vars.SUPABASE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Sync playlists
+        run: python -m cronchords
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
