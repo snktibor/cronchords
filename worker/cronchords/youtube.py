@@ -1,8 +1,8 @@
 """The parts of the YouTube Data API v3 the sync needs.
 
 Quota, as of June 2026: search.list has its own bucket of 100 calls a day,
-every other method shares 10,000 units a day. Reads cost 1 unit, inserts 50.
-Both reset at midnight Pacific time.
+every other method shares 10,000 units a day. Reads cost 1 unit, inserts and
+deletes 50. Both reset at midnight Pacific time.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ API_URL = "https://www.googleapis.com/youtube/v3"
 
 QUOTA_REASONS = frozenset({"quotaExceeded", "dailyLimitExceeded"})
 
-# Inserting into a playlist occasionally fails with 409 ("operation aborted")
-# when YouTube is busy. It is safe to retry.
+# Changing a playlist occasionally fails with 409 ("operation aborted") when
+# YouTube is busy. It is safe to retry.
 WRITE_RETRY_STATUSES = RETRY_STATUSES | {409}
 
 
@@ -52,8 +52,18 @@ class VideoUnavailableError(YouTubeError):
 class Video:
     id: str
     title: str
+    # The uploader. Empty for deleted and private videos in a playlist.
     channel: str
     duration_s: int | None = None
+
+    def __str__(self) -> str:
+        return f"{self.title} (https://youtu.be/{self.id})"
+
+
+@dataclass(frozen=True)
+class PlaylistItem:
+    id: str
+    video: Video
 
 
 def refresh_access_token(
@@ -93,19 +103,28 @@ class YouTubeClient:
         self.units_used = 0
         self.searches = 0
 
-    def playlist_video_ids(self, playlist_id: str) -> set[str]:
+    def playlist_items(self, playlist_id: str) -> list[PlaylistItem]:
         params = {
-            "part": "contentDetails",
+            "part": "snippet",
             "playlistId": playlist_id,
             "maxResults": 50,
-            "fields": "nextPageToken,items/contentDetails/videoId",
+            "fields": (
+                "nextPageToken,items(id,snippet(title,videoOwnerChannelTitle,resourceId/videoId))"
+            ),
         }
-        video_ids: set[str] = set()
+        items: list[PlaylistItem] = []
         while True:
             page = self._call("GET", "playlistItems", params=params)
-            video_ids.update(item["contentDetails"]["videoId"] for item in page.get("items", []))
+            for item in page.get("items", []):
+                snippet = item["snippet"]
+                video = Video(
+                    id=snippet["resourceId"]["videoId"],
+                    title=snippet.get("title") or "",
+                    channel=snippet.get("videoOwnerChannelTitle") or "",
+                )
+                items.append(PlaylistItem(item["id"], video))
             if not page.get("nextPageToken"):
-                return video_ids
+                return items
             params["pageToken"] = page["nextPageToken"]
 
     def search(self, query: str, limit: int = 10) -> list[Video]:
@@ -151,8 +170,8 @@ class YouTubeClient:
                 durations[item["id"]] = seconds
         return durations
 
-    def add_to_playlist(self, playlist_id: str, video_id: str) -> None:
-        self._call(
+    def add_to_playlist(self, playlist_id: str, video_id: str) -> PlaylistItem:
+        item = self._call(
             "POST",
             "playlistItems",
             params={"part": "snippet"},
@@ -163,24 +182,30 @@ class YouTubeClient:
                 }
             },
         )
+        return PlaylistItem(item["id"], Video(video_id, title="", channel=""))
+
+    def remove_from_playlist(self, item_id: str) -> None:
+        self._call("DELETE", "playlistItems", params={"id": item_id})
 
     def _call(self, method: str, resource: str, **kwargs: Any) -> dict[str, Any]:
         is_search = resource == "search"
+        is_write = method != "GET"
         if is_search:
             self.searches += 1
         else:
-            self.units_used += 50 if method == "POST" else 1
+            self.units_used += 50 if is_write else 1
 
         response = send(
             self._http,
             method,
             f"{API_URL}/{resource}",
             headers=self._headers,
-            retry_statuses=WRITE_RETRY_STATUSES if method == "POST" else RETRY_STATUSES,
+            retry_statuses=WRITE_RETRY_STATUSES if is_write else RETRY_STATUSES,
             **kwargs,
         )
         if response.is_success:
-            return response.json()
+            # Deleting answers with 204 No Content.
+            return response.json() if response.content else {}
 
         message, reason = _error_details(response)
         if reason in QUOTA_REASONS:

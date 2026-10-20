@@ -78,7 +78,9 @@ class Syncer:
         tracks, skipped = self.spotify.get_tracks(mapping.spotify_playlist_id)
         tracks = _unique(tracks)
         cache = self.db.get_cache_entries(track.isrc for track in tracks)
-        on_youtube = self.youtube.playlist_video_ids(mapping.youtube_playlist_id)
+        on_youtube = {
+            item.video.id for item in self.youtube.playlist_items(mapping.youtube_playlist_id)
+        }
         log.info(
             "[%s] %d tracks (%d skipped: local files, episodes or no ISRC), %d not searched yet",
             mapping.label,

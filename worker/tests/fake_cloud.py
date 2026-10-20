@@ -227,7 +227,7 @@ class FakeCloud:
                 },
             )
 
-        cost = 50 if request.method == "POST" else 1
+        cost = 1 if request.method == "GET" else 50
         if self.units_left < cost:
             return _youtube_error(403, "quotaExceeded")
         self.units_left -= cost
@@ -246,13 +246,14 @@ class FakeCloud:
             )
 
         if resource == "playlistItems" and request.method == "GET":
-            playlist = self.youtube_playlists.get(params["playlistId"])
+            playlist_id = params["playlistId"]
+            playlist = self.youtube_playlists.get(playlist_id)
             if playlist is None:
                 return _youtube_error(404, "playlistNotFound")
             start = int(params.get("pageToken", 0))
             end = start + int(params["maxResults"])
             page: dict[str, Any] = {
-                "items": [{"contentDetails": {"videoId": vid}} for vid in playlist[start:end]]
+                "items": [self._playlist_item(playlist_id, vid) for vid in playlist[start:end]]
             }
             if end < len(playlist):
                 page["nextPageToken"] = str(end)
@@ -265,9 +266,26 @@ class FakeCloud:
             if video is None or video.removed:
                 return _youtube_error(404, "videoNotFound")
             self.youtube_playlists[snippet["playlistId"]].append(video_id)
-            return httpx.Response(200, json={"id": f"item-{video_id}"})
+            return httpx.Response(200, json={"id": f"{snippet['playlistId']}/{video_id}"})
+
+        if resource == "playlistItems" and request.method == "DELETE":
+            playlist_id, video_id = params["id"].split("/")
+            self.youtube_playlists[playlist_id].remove(video_id)
+            return httpx.Response(204)
 
         raise AssertionError(f"unexpected YouTube call {request.method} {request.url}")
+
+    def _playlist_item(self, playlist_id: str, video_id: str) -> dict[str, Any]:
+        snippet: dict[str, Any] = {"resourceId": {"kind": "youtube#video", "videoId": video_id}}
+        video = self.videos.get(video_id)
+        if video is None:
+            snippet |= {"title": f"Video {video_id}", "videoOwnerChannelTitle": "Someone"}
+        elif video.removed:
+            snippet["title"] = "Deleted video"
+        else:
+            snippet |= {"title": video.title, "videoOwnerChannelTitle": video.channel}
+        # Ids of playlist items are opaque strings; these ones say what to remove.
+        return {"id": f"{playlist_id}/{video_id}", "snippet": snippet}
 
 
 def _youtube_error(status: int, reason: str) -> httpx.Response:
