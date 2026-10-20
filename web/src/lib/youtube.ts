@@ -71,7 +71,7 @@ export async function createYouTubePlaylist(title: string): Promise<Playlist> {
   const playlist = await call<YouTubePlaylist>('playlists?part=snippet,status', token, {
     method: 'POST',
     body: JSON.stringify({
-      snippet: { title, description: 'Synced from Spotify with cronchords' },
+      snippet: { title, description: 'Synced with Spotify by cronchords' },
       status: { privacyStatus: 'private' },
     }),
   })

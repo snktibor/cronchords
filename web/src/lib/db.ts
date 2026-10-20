@@ -10,19 +10,26 @@ export interface AppConfig {
   youtube_connected_at: string | null
 }
 
+export type SyncDirection = 'spotify_to_youtube' | 'youtube_to_spotify' | 'both'
+
 export interface PlaylistMapping {
   id: string
   spotify_playlist_id: string
   spotify_playlist_name: string | null
   youtube_playlist_id: string
   youtube_playlist_name: string | null
+  direction: SyncDirection
   last_synced_at: string | null
   last_error: string | null
 }
 
 export type NewMapping = Pick<
   PlaylistMapping,
-  'spotify_playlist_id' | 'spotify_playlist_name' | 'youtube_playlist_id' | 'youtube_playlist_name'
+  | 'spotify_playlist_id'
+  | 'spotify_playlist_name'
+  | 'youtube_playlist_id'
+  | 'youtube_playlist_name'
+  | 'direction'
 >
 
 export async function loadConfig(): Promise<AppConfig> {
@@ -46,7 +53,7 @@ export async function listMappings(): Promise<PlaylistMapping[]> {
   const { data, error } = await supabase
     .from('playlist_mappings')
     .select(
-      'id, spotify_playlist_id, spotify_playlist_name, youtube_playlist_id, youtube_playlist_name, last_synced_at, last_error',
+      'id, spotify_playlist_id, spotify_playlist_name, youtube_playlist_id, youtube_playlist_name, direction, last_synced_at, last_error',
     )
     .order('created_at')
   if (error) throw new Error(error.message)
