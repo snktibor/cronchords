@@ -63,6 +63,15 @@ Every pair of playlists has a direction, which you pick when you create it:
   syncs both ways can't be part of another pair, since the pairs would pass
   each other's removals on.
 
+In a pair that syncs both ways, you can fix a wrong match in the playlist
+itself: remove the song the worker added and add the right one. For 72 hours
+after the worker adds a song, removing it doesn't remove the song on the other
+side straight away. The worker waits 12 hours for a song with the same title
+to be added in its place, then pairs that one with the song on the other side
+and changes nothing else. It also uses the new match for other playlists from
+then on. If no such song is added in 12 hours, the song is removed on the other
+side too.
+
 Songs that have no match on the other side stay where they are. When a video
 on YouTube gets deleted or made private, the worker looks for another upload of
 the song, and you can remove the dead entry from the playlist without the song
@@ -219,18 +228,22 @@ and to the secret key.
 - **"Spotify didn't allow changing the playlist"**: reconnect Spotify in the
   dashboard. Connections made before cronchords could sync to Spotify only
   allowed reading playlists.
-- **A song was matched to the wrong video**: in the Supabase table editor, find
-  the song's row in `track_sync_cache` and put the right video ID in
-  `youtube_video_id` (or clear it to skip the song), then remove the wrong video
-  from the YouTube playlist. The right one is added the next time that Spotify
-  playlist changes. For a pair that syncs both ways, add the right video to the
-  YouTube playlist first and remove the wrong one after: removing it alone
-  would remove the song from Spotify too.
-- **A video was matched to the wrong Spotify track**: the same, in
-  `video_sync_cache`: put the right track ID (the part after `/track/` in the
-  song's Spotify link) in `spotify_track_id`, or clear it to skip the video.
-  Then remove the wrong track from the Spotify playlist, or, for a pair that
-  syncs both ways, add the right track first and then remove the wrong one.
+- **A song was matched to the wrong video**: in a pair that syncs both ways,
+  within 72 hours of the worker adding the video, replace it with the right one
+  in the YouTube playlist (see [Sync directions](#sync-directions)). Otherwise,
+  in the Supabase table editor, find the song's row in `track_sync_cache` and
+  put the right video ID in `youtube_video_id` (or clear it to skip the song),
+  then remove the wrong video from the YouTube playlist. The right one is added
+  the next time that Spotify playlist changes. For a pair that syncs both ways,
+  add the right video to the YouTube playlist first and remove the wrong one
+  after: removing it alone would remove the song from Spotify too.
+- **A video was matched to the wrong Spotify track**: the same the other way
+  round. Within 72 hours in a pair that syncs both ways, replace the track in
+  the Spotify playlist. Otherwise put the right track ID (the part after
+  `/track/` in the song's Spotify link) in `spotify_track_id` in
+  `video_sync_cache`, or clear it to skip the video. Then remove the wrong track
+  from the Spotify playlist, or, for a pair that syncs both ways, add the right
+  track first and then remove the wrong one.
 
 ## Development
 
