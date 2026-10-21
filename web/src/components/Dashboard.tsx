@@ -5,9 +5,9 @@ import { finishSpotifyConnection } from '../lib/spotify'
 import { supabase } from '../lib/supabase'
 import { errorMessage } from '../lib/util'
 import { finishYouTubeConnection } from '../lib/youtube'
+import { Accounts } from './Accounts'
 import { Mappings } from './Mappings'
 import { NewMapping } from './NewMapping'
-import { Settings } from './Settings'
 
 export function Dashboard({ email }: { email: string | undefined }) {
   const [config, setConfig] = useState<AppConfig | null>(null)
@@ -48,21 +48,31 @@ export function Dashboard({ email }: { email: string | undefined }) {
 
   return (
     <main>
-      <header>
-        <h1>cronchords</h1>
-        <p>
-          {email}{' '}
-          <button type="button" onClick={signOut}>
+      <header className="top">
+        <h1 className="wordmark">cronchords</h1>
+        <p className="note">
+          {email}
+          <button type="button" className="quiet" onClick={signOut}>
             Sign out
           </button>
         </p>
       </header>
       {notice && <p role="status">{notice}</p>}
       {error && <p role="alert">{error}</p>}
-      {config && <Settings config={config} />}
-      {connected && <NewMapping onCreated={reload} />}
-      {config && !connected && <p>Connect Spotify and YouTube to start syncing playlists.</p>}
-      <Mappings mappings={mappings} onChange={reload} />
+      {config && (
+        <>
+          <Accounts config={config} />
+          {connected ? (
+            <NewMapping onCreated={reload} />
+          ) : (
+            <section>
+              <h2>New sync</h2>
+              <p className="note">Connect Spotify and YouTube to start syncing playlists.</p>
+            </section>
+          )}
+          <Mappings mappings={mappings} onChange={reload} />
+        </>
+      )}
     </main>
   )
 }

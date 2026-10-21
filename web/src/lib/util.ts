@@ -14,7 +14,7 @@ export function formatDate(value: string): string {
 }
 
 export const DIRECTIONS: Record<SyncDirection, { label: string; arrow: string }> = {
-  both: { label: 'Both ways', arrow: '⇄' },
+  both: { label: 'Both ways', arrow: '↔' },
   spotify_to_youtube: { label: 'Spotify → YouTube', arrow: '→' },
   youtube_to_spotify: { label: 'YouTube → Spotify', arrow: '←' },
 }
