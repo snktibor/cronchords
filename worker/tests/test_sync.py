@@ -291,3 +291,21 @@ def test_warns_before_spotify_access_runs_out(cloud, caplog):
     sync(cloud)
 
     assert "Reconnect Spotify" in caplog.text
+
+
+def test_one_way_mappings_ignore_a_wait_left_from_syncing_both_ways(cloud):
+    waiting = {
+        "track": GET_LUCKY.track_id,
+        "video": "lucky",
+        "copied_to": "youtube",
+        "copied_at": (NOW - timedelta(days=2)).isoformat(),
+        "missing_since": (NOW - timedelta(days=1)).isoformat(),
+    }
+    cloud.mappings[0]["synced_songs"] = [waiting]
+    sync(cloud)
+    sync(cloud)
+    cloud.requests.clear()
+
+    assert sync(cloud) == 0
+
+    assert cloud.calls("api.spotify.com", "/v1/playlists/road-trip/items") == []
