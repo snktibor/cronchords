@@ -109,13 +109,17 @@ def keep_syncing(
         signal.signal(signal.SIGTERM, previous)
 
 
-def sync_once(url: str, key: str) -> int:
-    db = Database(url, key)
+def sync_once(url: str, key: str, transport: httpx.BaseTransport | None = None) -> int:
+    db = Database(url, key, transport=transport)
     try:
-        with httpx.Client(timeout=30) as http:
+        with httpx.Client(timeout=30, transport=transport) as http:
             return run(db, http)
     except (DatabaseError, spotify.SpotifyError, youtube.YouTubeError) as exc:
         log.error("%s", exc)
+        return 1
+    except httpx.TransportError as exc:
+        # The request was retried already, so the connection or the service is down.
+        log.error("Network error: %s", exc)
         return 1
     finally:
         db.close()

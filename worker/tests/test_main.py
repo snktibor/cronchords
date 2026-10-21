@@ -1,9 +1,12 @@
 import signal
 from datetime import timedelta
 
+import httpx
 import pytest
+from fake_cloud import SUPABASE_KEY, SUPABASE_URL
 
-from cronchords.__main__ import keep_syncing, parse_args
+from cronchords import http as http_module
+from cronchords.__main__ import keep_syncing, parse_args, sync_once
 
 
 class FakeTime:
@@ -98,6 +101,18 @@ def test_sigterm_during_a_sync_lets_it_finish():
 
     assert finished == [0]
     assert signal.getsignal(signal.SIGTERM) is handler
+
+
+def test_network_errors_are_reported_without_a_traceback(monkeypatch, caplog):
+    monkeypatch.setattr(http_module.time, "sleep", lambda seconds: None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("[Errno 111] Connection refused")
+
+    assert sync_once(SUPABASE_URL, SUPABASE_KEY, transport=httpx.MockTransport(handler)) == 1
+    error = caplog.records[-1]
+    assert error.getMessage() == "Network error: [Errno 111] Connection refused"
+    assert error.exc_info is None
 
 
 def test_every_takes_whole_minutes():
