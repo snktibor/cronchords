@@ -1,9 +1,17 @@
+import json
 from datetime import UTC, datetime
 
 import httpx
 import pytest
 
-from cronchords.supabase import CacheEntry, Database, DatabaseError, Direction
+from cronchords.supabase import (
+    CacheEntry,
+    Database,
+    DatabaseError,
+    Direction,
+    Side,
+    SyncedSong,
+)
 
 
 def database(handler, key: str = "sb_secret_abc") -> Database:
@@ -74,8 +82,20 @@ def test_mappings_know_their_direction_and_synced_songs():
             "direction": "both",
             "spotify_snapshot_id": None,
             "youtube_snapshot_id": None,
-            "synced_songs": [["track", "video"]],
+            "synced_songs": [
+                {"track": "t1", "video": "v1"},
+                {
+                    "track": "t2",
+                    "video": "v2",
+                    "copied_to": "youtube",
+                    "copied_at": "2026-10-20T12:00:00+00:00",
+                    "missing_since": "2026-10-21T08:00:00+00:00",
+                },
+                # Saved before the worker kept track of the songs it copied.
+                ["t3", "v3"],
+            ],
             "spotify_playlist_name": "Road Trip",
+            "last_synced_at": "2026-10-21T09:00:00+00:00",
         }
         return httpx.Response(200, json=[row])
 
@@ -83,7 +103,40 @@ def test_mappings_know_their_direction_and_synced_songs():
 
     assert mapping.direction is Direction.BOTH
     assert mapping.to_spotify and mapping.to_youtube
-    assert mapping.synced_songs == frozenset({("track", "video")})
+    assert mapping.last_synced_at == datetime(2026, 10, 21, 9, tzinfo=UTC)
+    assert mapping.synced_songs == (
+        SyncedSong("t1", "v1"),
+        SyncedSong(
+            "t2",
+            "v2",
+            copied_to=Side.YOUTUBE,
+            copied_at=datetime(2026, 10, 20, 12, tzinfo=UTC),
+            missing_since=datetime(2026, 10, 21, 8, tzinfo=UTC),
+        ),
+        SyncedSong("t3", "v3"),
+    )
+
+
+def test_synced_songs_are_saved_as_they_are_read():
+    song = SyncedSong(
+        "t2",
+        "v2",
+        copied_to=Side.SPOTIFY,
+        copied_at=datetime(2026, 10, 20, 12, tzinfo=UTC),
+        missing_since=datetime(2026, 10, 21, 8, tzinfo=UTC),
+    )
+
+    assert json.loads(json.dumps(SyncedSong("t1", "v1").to_json())) == {
+        "track": "t1",
+        "video": "v1",
+    }
+    assert json.loads(json.dumps(song.to_json())) == {
+        "track": "t2",
+        "video": "v2",
+        "copied_to": "spotify",
+        "copied_at": "2026-10-20T12:00:00+00:00",
+        "missing_since": "2026-10-21T08:00:00+00:00",
+    }
 
 
 def test_videos_can_be_looked_up_by_the_tracks_they_were_matched_to():

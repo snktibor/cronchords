@@ -47,6 +47,32 @@ class Direction(StrEnum):
     BOTH = "both"
 
 
+class Side(StrEnum):
+    SPOTIFY = "spotify"
+    YOUTUBE = "youtube"
+
+
+@dataclass(frozen=True)
+class SyncedSong:
+    """A song that was on both sides of a two-way mapping after a sync, see sync.py."""
+
+    track_id: str
+    video_id: str
+    # Where the worker copied the song to and when, while that is recent.
+    copied_to: Side | None = None
+    copied_at: datetime | None = None
+    # The copy was removed since, and the worker is waiting for a replacement.
+    missing_since: datetime | None = None
+
+    def to_json(self) -> dict[str, str]:
+        entry = {"track": self.track_id, "video": self.video_id}
+        if self.copied_to and self.copied_at:
+            entry |= {"copied_to": self.copied_to, "copied_at": self.copied_at.isoformat()}
+        if self.missing_since:
+            entry["missing_since"] = self.missing_since.isoformat()
+        return entry
+
+
 @dataclass(frozen=True)
 class Mapping:
     id: str
@@ -55,9 +81,9 @@ class Mapping:
     direction: Direction = Direction.SPOTIFY_TO_YOUTUBE
     spotify_snapshot_id: str | None = None
     youtube_snapshot_id: str | None = None
-    # (Spotify track id, YouTube video id) pairs, see sync.py
-    synced_songs: frozenset[tuple[str, str]] = frozenset()
+    synced_songs: tuple[SyncedSong, ...] = ()
     spotify_playlist_name: str | None = None
+    last_synced_at: datetime | None = None
 
     @property
     def label(self) -> str:
@@ -134,7 +160,8 @@ class Database:
             "/playlist_mappings",
             {
                 "select": "id,spotify_playlist_id,youtube_playlist_id,direction,"
-                "spotify_snapshot_id,youtube_snapshot_id,synced_songs,spotify_playlist_name",
+                "spotify_snapshot_id,youtube_snapshot_id,synced_songs,spotify_playlist_name,"
+                "last_synced_at",
                 "order": "created_at",
             },
         )
@@ -243,8 +270,24 @@ def _mapping(row: dict[str, Any]) -> Mapping:
         direction=Direction(row["direction"]),
         spotify_snapshot_id=row["spotify_snapshot_id"],
         youtube_snapshot_id=row["youtube_snapshot_id"],
-        synced_songs=frozenset(tuple(pair) for pair in row["synced_songs"] or []),
+        synced_songs=tuple(_synced_song(entry) for entry in row["synced_songs"] or []),
         spotify_playlist_name=row["spotify_playlist_name"],
+        last_synced_at=_parse_time(row["last_synced_at"]),
+    )
+
+
+def _synced_song(entry: dict[str, str] | list[str]) -> SyncedSong:
+    if isinstance(entry, list):
+        # Saved before the worker kept track of the songs it copied.
+        track_id, video_id = entry
+        return SyncedSong(track_id, video_id)
+    copied_to = entry.get("copied_to")
+    return SyncedSong(
+        track_id=entry["track"],
+        video_id=entry["video"],
+        copied_to=Side(copied_to) if copied_to else None,
+        copied_at=_parse_time(entry.get("copied_at")),
+        missing_since=_parse_time(entry.get("missing_since")),
     )
 
 
