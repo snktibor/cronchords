@@ -10,6 +10,7 @@ from __future__ import annotations
 import html
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -64,6 +65,7 @@ class Video:
 class PlaylistItem:
     id: str
     video: Video
+    added_at: datetime | None = None
 
 
 def refresh_access_token(
@@ -109,7 +111,8 @@ class YouTubeClient:
             "playlistId": playlist_id,
             "maxResults": 50,
             "fields": (
-                "nextPageToken,items(id,snippet(title,videoOwnerChannelTitle,resourceId/videoId))"
+                "nextPageToken,"
+                "items(id,snippet(publishedAt,title,videoOwnerChannelTitle,resourceId/videoId))"
             ),
         }
         items: list[PlaylistItem] = []
@@ -122,7 +125,10 @@ class YouTubeClient:
                     title=snippet.get("title") or "",
                     channel=snippet.get("videoOwnerChannelTitle") or "",
                 )
-                items.append(PlaylistItem(item["id"], video))
+                # When the video was added to the playlist, not when it was uploaded.
+                published = snippet.get("publishedAt")
+                added_at = datetime.fromisoformat(published) if published else None
+                items.append(PlaylistItem(item["id"], video, added_at))
             if not page.get("nextPageToken"):
                 return items
             params["pageToken"] = page["nextPageToken"]
