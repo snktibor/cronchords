@@ -92,6 +92,11 @@ class FakeCloud:
     units_left: int = 10_000
     spotify_rotations: int = 1
     requests: list[httpx.Request] = field(default_factory=list)
+    # The time of the current sync()
+    now: datetime = NOW
+    # When things were added to playlists, by (playlist id, track or video id).
+    # What the tests put in counts as added when the worker first lists it.
+    added: dict[tuple[str, str], datetime] = field(default_factory=dict)
 
     @property
     def transport(self) -> httpx.MockTransport:
@@ -258,6 +263,8 @@ class FakeCloud:
                     {"is_local": False, "item": self.spotify_catalog[track_id]}
                     for track_id in track_ids
                 ]
+                for track_id in track_ids:
+                    self.added[match.group(1), track_id] = self.now
             else:
                 assert len(body["items"]) <= 100
                 uris = {item["uri"] for item in body["items"]}
@@ -276,7 +283,13 @@ class FakeCloud:
         has_more = offset + limit < len(entries)
         page = {
             "total": len(entries),
-            "items": entries[offset : offset + limit],
+            "items": [
+                {
+                    "added_at": self._added_at(match.group(1), (entry["item"] or {}).get("id")),
+                    **entry,
+                }
+                for entry in entries[offset : offset + limit]
+            ],
             "next": f"{request.url}&more" if has_more else None,
         }
         if self.while_reading_spotify:
@@ -359,6 +372,7 @@ class FakeCloud:
             if video is None or video.removed:
                 return _youtube_error(404, "videoNotFound")
             self.youtube_playlists[snippet["playlistId"]].append(video_id)
+            self.added[snippet["playlistId"], video_id] = self.now
             return httpx.Response(200, json={"id": f"{snippet['playlistId']}/{video_id}"})
 
         if resource == "playlistItems" and request.method == "DELETE":
@@ -369,7 +383,10 @@ class FakeCloud:
         raise AssertionError(f"unexpected YouTube call {request.method} {request.url}")
 
     def _playlist_item(self, playlist_id: str, video_id: str) -> dict[str, Any]:
-        snippet: dict[str, Any] = {"resourceId": {"kind": "youtube#video", "videoId": video_id}}
+        snippet: dict[str, Any] = {
+            "resourceId": {"kind": "youtube#video", "videoId": video_id},
+            "publishedAt": self._added_at(playlist_id, video_id),
+        }
         video = self.videos.get(video_id)
         if video is None:
             snippet |= {"title": f"Video {video_id}", "videoOwnerChannelTitle": "Someone"}
@@ -379,6 +396,10 @@ class FakeCloud:
             snippet |= {"title": video.title, "videoOwnerChannelTitle": video.channel}
         # Ids of playlist items are opaque strings; these ones say what to remove.
         return {"id": f"{playlist_id}/{video_id}", "snippet": snippet}
+
+    def _added_at(self, playlist_id: str, item_id: str | None) -> str:
+        added = self.added.setdefault((playlist_id, item_id or ""), self.now)
+        return added.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _spotify_error(status: int, message: str) -> httpx.Response:
@@ -400,6 +421,7 @@ def _youtube_error(status: int, reason: str) -> httpx.Response:
 
 def sync(cloud: FakeCloud, now: datetime = NOW) -> int:
     """Run the worker once against the fake cloud, return its exit code."""
+    cloud.now = now
     db = Database(SUPABASE_URL, SUPABASE_KEY, transport=cloud.transport)
     try:
         with httpx.Client(transport=cloud.transport) as http:

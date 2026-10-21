@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -16,7 +17,8 @@ API_URL = "https://api.spotify.com/v1"
 # Since the February 2026 API changes playlist entries live under /items and
 # each entry holds its track in "item" (it used to be "track").
 ITEM_FIELDS = (
-    "total,next,items(is_local,item(type,id,name,duration_ms,external_ids(isrc),artists(name)))"
+    "total,next,"
+    "items(added_at,is_local,item(type,id,name,duration_ms,external_ids(isrc),artists(name)))"
 )
 PAGE_SIZE = 50
 # Adding and removing takes at most 100 tracks per request.
@@ -48,6 +50,8 @@ class Track:
     name: str
     artists: tuple[str, ...]
     duration_ms: int
+    # When it was added to the playlist it was read from. Very old entries have none.
+    added_at: datetime | None = None
 
     def __str__(self) -> str:
         return f"{', '.join(self.artists)} - {self.name}"
@@ -122,6 +126,8 @@ class SpotifyClient:
             for entry in page.get("items") or []:
                 track = None if entry.get("is_local") else _parse_track(entry.get("item"))
                 if track:
+                    if added_at := entry.get("added_at"):
+                        track = replace(track, added_at=datetime.fromisoformat(added_at))
                     tracks.append(track)
                 else:
                     skipped += 1

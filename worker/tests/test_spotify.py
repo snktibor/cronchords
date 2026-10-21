@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -92,3 +93,22 @@ def test_a_playlist_that_changed_while_being_read_is_not_used(total, snapshot_af
 
     with pytest.raises(PlaylistChangedError):
         client(handler).get_tracks("PL1", "s1")
+
+
+def test_playlist_tracks_know_when_they_were_added():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/items"):
+            assert "added_at" in request.url.params["fields"]
+            item = {"type": "track", "id": "a", "name": "Dreams", "artists": []}
+            entries = [
+                {"added_at": "2026-10-20T12:00:00Z", "is_local": False, "item": item},
+                # Very old playlists don't know.
+                {"added_at": None, "is_local": False, "item": item | {"id": "b"}},
+            ]
+            return httpx.Response(200, json={"total": 2, "next": None, "items": entries})
+        return httpx.Response(200, json={"snapshot_id": "s1"})
+
+    (new, old), _ = client(handler).get_tracks("PL1", "s1")
+
+    assert new.added_at == datetime(2026, 10, 20, 12, tzinfo=UTC)
+    assert old.added_at is None

@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import httpx
 import pytest
 
@@ -90,10 +92,14 @@ def test_quota_usage_is_counted():
     assert youtube.units_used == 101
 
 
-def test_playlist_items_name_the_uploader():
+def test_playlist_items_name_the_uploader_and_when_they_were_added():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["part"] == "snippet"
-        snippet = {"title": "Dreams", "resourceId": {"videoId": "dreams"}}
+        snippet = {
+            "title": "Dreams",
+            "resourceId": {"videoId": "dreams"},
+            "publishedAt": "2026-10-20T12:00:00Z",
+        }
         return httpx.Response(
             200,
             json={
@@ -112,7 +118,11 @@ def test_playlist_items_name_the_uploader():
 
     dreams, deleted = client(handler).playlist_items("PL1")
 
-    assert dreams == PlaylistItem("i1", Video("dreams", "Dreams", "Fleetwood Mac - Topic"))
+    assert dreams == PlaylistItem(
+        "i1",
+        Video("dreams", "Dreams", "Fleetwood Mac - Topic"),
+        datetime(2026, 10, 20, 12, tzinfo=UTC),
+    )
     assert deleted.video.channel == ""
 
 
