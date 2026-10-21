@@ -1,0 +1,11 @@
+# Runs the worker on a machine of your own instead of GitHub Actions. See
+# "Running the worker on your own machine" in the README.
+name: cronchords
+
+services:
+  worker:
+    build: .
+    # Syncs right away, then every 60 minutes.
+    command: ["--every", "60"]
+    env_file: .env
+    restart: unless-stopped
