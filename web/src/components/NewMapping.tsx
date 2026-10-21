@@ -3,6 +3,7 @@ import { addMapping, type SyncDirection } from '../lib/db'
 import { createSpotifyPlaylist, listSpotifyPlaylists } from '../lib/spotify'
 import { DIRECTIONS, errorMessage, type Playlist } from '../lib/util'
 import { createYouTubePlaylist, listYouTubePlaylists } from '../lib/youtube'
+import { Status } from './Status'
 
 const NEW_PLAYLIST = 'new'
 
@@ -80,7 +81,7 @@ export function NewMapping({ onCreated }: { onCreated: () => void }) {
       <h2>New sync</h2>
       <form className="pairing" onSubmit={submit}>
         <label>
-          Spotify playlist
+          <span>Spotify playlist</span>
           <select value={spotifyId} onChange={(e) => setSpotifyId(e.target.value)} required>
             <option value="">{spotifyPlaylists ? 'Choose a playlist' : 'Loading…'}</option>
             {newOnSpotify && (
@@ -94,7 +95,7 @@ export function NewMapping({ onCreated }: { onCreated: () => void }) {
           </select>
         </label>
         <label>
-          Direction
+          <span>Direction</span>
           <select
             value={direction}
             onChange={(e) => changeDirection(e.target.value as SyncDirection)}
@@ -107,7 +108,7 @@ export function NewMapping({ onCreated }: { onCreated: () => void }) {
           </select>
         </label>
         <label>
-          YouTube playlist
+          <span>YouTube playlist</span>
           <select value={youtubeId} onChange={(e) => setYouTubeId(e.target.value)} required>
             <option value="">{youtubePlaylists ? 'Choose a playlist' : 'Loading…'}</option>
             {newOnYouTube && (
@@ -128,7 +129,11 @@ export function NewMapping({ onCreated }: { onCreated: () => void }) {
         )}
         <button disabled={busy}>Create sync</button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <Status tone="problem" role="alert">
+          {error}
+        </Status>
+      )}
     </section>
   )
 }

@@ -4,6 +4,7 @@ import { redirectUri } from '../lib/oauth'
 import { connectSpotify } from '../lib/spotify'
 import { errorMessage, formatDate } from '../lib/util'
 import { connectYouTube } from '../lib/youtube'
+import { Status } from './Status'
 
 // Spotify refresh tokens stop working six months after connecting.
 const SPOTIFY_ACCESS_DAYS = 180
@@ -55,7 +56,7 @@ export function Accounts({ config }: { config: AppConfig }) {
             <Connection connected={Boolean(config.spotify_refresh_token)} />
           </h3>
           <label>
-            Client ID
+            <span>Client ID</span>
             <input
               value={spotifyClientId}
               onChange={(e) => setSpotifyClientId(e.target.value)}
@@ -90,7 +91,7 @@ export function Accounts({ config }: { config: AppConfig }) {
             <Connection connected={Boolean(config.youtube_refresh_token)} />
           </h3>
           <label>
-            Google client ID
+            <span>Google client ID</span>
             <input
               value={googleClientId}
               onChange={(e) => setGoogleClientId(e.target.value)}
@@ -98,7 +99,7 @@ export function Accounts({ config }: { config: AppConfig }) {
             />
           </label>
           <label>
-            Google client secret
+            <span>Google client secret</span>
             <input
               type="password"
               value={googleClientSecret}
@@ -115,15 +116,19 @@ export function Accounts({ config }: { config: AppConfig }) {
         </form>
       </div>
 
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <Status tone="problem" role="alert">
+          {error}
+        </Status>
+      )}
     </section>
   )
 }
 
 function Connection({ connected }: { connected: boolean }) {
   return connected ? (
-    <span className="connection ok">Connected</span>
+    <Status tone="good">Connected</Status>
   ) : (
-    <span className="connection">Not connected</span>
+    <Status tone="info">Not connected</Status>
   )
 }
