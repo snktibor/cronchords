@@ -1,12 +1,22 @@
-"""Run one sync pass: python -m cronchords"""
+"""Sync the playlists: python -m cronchords [--every MINUTES]
+
+Without --every it syncs once and exits, the way the GitHub Actions workflow
+runs it. With it, it keeps running and syncs every so many minutes, for a
+machine of your own such as a Raspberry Pi.
+"""
 
 from __future__ import annotations
 
+import argparse
+import contextlib
 import logging
 import os
+import signal
 import sys
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from types import FrameType
 
 import httpx
 
@@ -23,14 +33,83 @@ SPOTIFY_EXPIRY_WARNING = timedelta(days=14)
 IN_GITHUB_ACTIONS = os.environ.get("GITHUB_ACTIONS") == "true"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     setup_logging()
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = os.environ.get("SUPABASE_SECRET_KEY", "").strip()
     if not url or not key:
         log.error("SUPABASE_URL and SUPABASE_SECRET_KEY have to be set")
         return 1
+    if args.every is None:
+        return sync_once(url, key)
 
+    # Ctrl+C stops it too, without waiting for the sync to finish.
+    with contextlib.suppress(KeyboardInterrupt):
+        keep_syncing(lambda: sync_once(url, key), args.every)
+    log.info("Stopped")
+    return 0
+
+
+def parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="python -m cronchords",
+        description="Sync the playlist pairs set up in the dashboard.",
+    )
+    parser.add_argument(
+        "--every",
+        type=minutes,
+        metavar="MINUTES",
+        help="keep running and sync every MINUTES minutes, starting right away",
+    )
+    return parser.parse_args(argv)
+
+
+def minutes(value: str) -> timedelta:
+    if not value.isdecimal() or int(value) < 1:
+        raise argparse.ArgumentTypeError(
+            f"expected a whole number of minutes (1 or more), got {value!r}"
+        )
+    return timedelta(minutes=int(value))
+
+
+def keep_syncing(
+    sync: Callable[[], object],
+    every: timedelta,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], object] = time.sleep,
+) -> None:
+    """Sync right away and then every so often, until SIGTERM arrives.
+
+    Syncs start `every` apart, unless one takes longer than that. SIGTERM is
+    what docker stop and systemctl stop send; a sync that has started is
+    finished first.
+    """
+    stopping = False
+
+    def stop(signum: int, frame: FrameType | None) -> None:
+        nonlocal stopping
+        stopping = True
+
+    previous = signal.signal(signal.SIGTERM, stop)
+    try:
+        while not stopping:
+            next_sync = clock() + every.total_seconds()
+            try:
+                sync()
+            except Exception:
+                log.exception("The sync stopped with an unexpected error")
+            if not stopping:
+                at = datetime.now() + timedelta(seconds=max(next_sync - clock(), 0))
+                log.info("Next sync at %s", f"{at:%H:%M}")
+            # Short naps, so that SIGTERM doesn't have to wait for the next sync.
+            while not stopping and clock() < next_sync:
+                sleep(min(next_sync - clock(), 1))
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def sync_once(url: str, key: str) -> int:
     db = Database(url, key)
     try:
         with httpx.Client(timeout=30) as http:
@@ -144,7 +223,7 @@ def setup_logging() -> None:
         handler.setFormatter(ActionsFormatter("%(message)s"))
     else:
         handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S")
+            logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%Y-%m-%d %H:%M:%S")
         )
     logging.basicConfig(level=logging.INFO, handlers=[handler])
     # httpx logs every request URL at INFO level.
