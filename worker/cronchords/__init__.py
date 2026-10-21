@@ -1,1 +1,1 @@
-"""One-way Spotify to YouTube playlist sync, meant to run from a cron job."""
+"""Spotify and YouTube playlist sync, meant to run every hour."""
