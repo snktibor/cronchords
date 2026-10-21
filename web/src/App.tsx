@@ -16,12 +16,17 @@ export default function App() {
 
   if (!isConfigured) {
     return (
-      <main className="stack narrow">
-        <h1 className="wordmark">cronchords</h1>
-        <p>
-          Build the dashboard with <code>VITE_SUPABASE_URL</code> and{' '}
-          <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> set. See the README.
-        </p>
+      <main className="page">
+        <header className="top">
+          <p className="wordmark">cronchords</p>
+        </header>
+        <div className="gate">
+          <h1>Not configured yet</h1>
+          <p>
+            Build the dashboard with <code>VITE_SUPABASE_URL</code> and{' '}
+            <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> set. See the README.
+          </p>
+        </div>
       </main>
     )
   }

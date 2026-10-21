@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
+import { Status } from './Status'
 
 export function SignIn() {
   const [email, setEmail] = useState('')
@@ -19,35 +20,42 @@ export function SignIn() {
   }
 
   return (
-    <main className="stack narrow">
-      <h1 className="wordmark">cronchords</h1>
-      <form onSubmit={submit}>
-        <label>
-          Email
-          <input
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
-        <button disabled={busy}>Sign in</button>
-      </form>
-      {error && <p role="alert">{error}</p>}
-      <p className="note">
-        Sign in with the user you created in your Supabase project (Authentication → Users).
-      </p>
+    <main className="page">
+      <header className="top">
+        <p className="wordmark">cronchords</p>
+      </header>
+      <div className="gate">
+        <h1>Sign in</h1>
+        <p>Use the user you created in your Supabase project under Authentication → Users.</p>
+        <form onSubmit={submit}>
+          <label>
+            <span>Email</span>
+            <input
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            <span>Password</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          <button disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+          {error && (
+            <Status tone="problem" role="alert">
+              {error}
+            </Status>
+          )}
+        </form>
+      </div>
     </main>
   )
 }

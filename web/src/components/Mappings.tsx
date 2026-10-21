@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { removeMapping, type PlaylistMapping } from '../lib/db'
 import { DIRECTIONS, errorMessage, formatDate } from '../lib/util'
+import { Status } from './Status'
 
 export function Mappings({
   mappings,
@@ -25,7 +26,7 @@ export function Mappings({
     <section>
       <h2>Active syncs</h2>
       {mappings.length === 0 ? (
-        <p className="note">Nothing is synced yet.</p>
+        <p className="lead">Nothing is synced yet.</p>
       ) : (
         <div>
           <div className="pairs-head">
@@ -40,7 +41,11 @@ export function Mappings({
           </ul>
         </div>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <Status tone="problem" role="alert">
+          {error}
+        </Status>
+      )}
     </section>
   )
 }
@@ -67,7 +72,7 @@ function Pair({ mapping, onRemove }: { mapping: PlaylistMapping; onRemove: () =>
       >
         {mapping.youtube_playlist_name ?? mapping.youtube_playlist_id}
       </a>
-      <p className="pair-status">
+      <p className="pair-meta">
         <span>
           {mapping.last_synced_at
             ? `Synced ${formatDate(mapping.last_synced_at)}`
@@ -77,7 +82,7 @@ function Pair({ mapping, onRemove }: { mapping: PlaylistMapping; onRemove: () =>
           Stop syncing
         </button>
       </p>
-      {mapping.last_error && <p className="pair-status warning">{mapping.last_error}</p>}
+      {mapping.last_error && <Status tone="warning">{mapping.last_error}</Status>}
     </li>
   )
 }
