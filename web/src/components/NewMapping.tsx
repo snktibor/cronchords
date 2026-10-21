@@ -78,7 +78,7 @@ export function NewMapping({ onCreated }: { onCreated: () => void }) {
   return (
     <section>
       <h2>New sync</h2>
-      <form onSubmit={submit}>
+      <form className="pairing" onSubmit={submit}>
         <label>
           Spotify playlist
           <select value={spotifyId} onChange={(e) => setSpotifyId(e.target.value)} required>
@@ -121,7 +121,7 @@ export function NewMapping({ onCreated }: { onCreated: () => void }) {
           </select>
         </label>
         {direction === 'both' && (
-          <p>
+          <p className="note">
             Songs added on either side are copied to the other one, and songs removed on either
             side are removed from the other one too.
           </p>

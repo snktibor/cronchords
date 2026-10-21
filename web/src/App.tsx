@@ -16,8 +16,8 @@ export default function App() {
 
   if (!isConfigured) {
     return (
-      <main>
-        <h1>cronchords</h1>
+      <main className="stack narrow">
+        <h1 className="wordmark">cronchords</h1>
         <p>
           Build the dashboard with <code>VITE_SUPABASE_URL</code> and{' '}
           <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> set. See the README.

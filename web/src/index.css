@@ -1,55 +1,321 @@
-/* Bare-bones layout, the real design is still to come. */
+/* The whole dashboard's styling: tokens, elements, then the few layouts. */
 
 :root {
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
   color-scheme: light dark;
+  --paper: light-dark(#fbfaf7, #141618);
+  --ink: light-dark(#1c1f22, #e9e7e2);
+  --muted: light-dark(#6b7076, #9ba0a6);
+  --line: light-dark(#e3e1db, #2c3035);
+  --field: light-dark(#ffffff, #1c1f23);
+  --ok: light-dark(#1a7f37, #5fd382);
+  --warn: light-dark(#b42318, #f2766c);
+  --spotify: #1db954;
+  --youtube: #ff0033;
+  --radius: 6px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
 }
 
 body {
-  max-width: 48rem;
-  margin: 0 auto;
-  padding: 1rem;
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
 }
 
-section {
-  margin-block: 2rem;
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 4rem;
+}
+
+h1,
+h2,
+h3,
+p,
+ul {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+h2 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+h3 {
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.wordmark {
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* The sign-in and setup pages: one short column. */
+.narrow {
+  max-width: 22rem;
+  padding-top: 3rem;
+}
+
+/* Sections and the sign-in page stack their content with one rhythm. */
+section,
+.stack {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+main > section {
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem 1.5rem;
+  padding-block: 1.25rem;
+}
+
+.top p {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+/* Spotify is green and on the left, YouTube red and on the right, everywhere. */
+.spotify::before,
+.youtube::before {
+  content: '';
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-right: 0.5em;
+  border-radius: 50%;
+  vertical-align: 0.1em;
+}
+
+.spotify::before {
+  background: var(--spotify);
+}
+
+.youtube::before {
+  background: var(--youtube);
+}
+
+/* Forms */
+
+form {
+  display: grid;
+  align-content: start;
+  gap: 0.875rem;
 }
 
 label {
-  display: block;
-  margin-block: 0.5rem;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 input,
 select {
-  display: block;
+  width: 100%;
   box-sizing: border-box;
-  width: 100%;
-  max-width: 28rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--field);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
+select {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23888' stroke-width='1.5' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem;
 }
 
-th,
-td {
-  padding: 0.4rem;
-  border-bottom: 1px solid #8884;
-  text-align: left;
-  vertical-align: top;
+button {
+  justify-self: start;
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
 }
 
-.ok {
-  color: #1a7f37;
+button:hover {
+  background: color-mix(in srgb, var(--ink) 85%, var(--paper));
 }
 
-.missing,
-.warning,
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Secondary actions look like links: sign out, stop syncing. */
+button.quiet,
+button.quiet:hover {
+  padding: 0;
+  background: none;
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+button.quiet:hover {
+  color: var(--ink);
+}
+
+/* Notices */
+
+[role='status'],
 [role='alert'] {
-  color: #c4314b;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+}
+
+[role='status'] {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+[role='alert'] {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+
+main > [role='status'],
+main > [role='alert'] {
+  margin-bottom: 1.25rem;
+}
+
+/* Accounts: the two services side by side */
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem 2.5rem;
+}
+
+.connection {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.connection.ok {
+  color: var(--ok);
+}
+
+/* New sync: Spotify playlist, direction, YouTube playlist in one row */
+
+.pairing {
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.875rem 1rem;
+  align-items: start;
+}
+
+.pairing > p,
+.pairing > button {
+  grid-column: 1 / -1;
+}
+
+/* Active syncs: the same three columns, with the arrows lined up as a spine */
+
+.pairs-head,
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 2.5rem 1fr;
+  column-gap: 0.75rem;
+}
+
+.pairs-head {
+  padding-bottom: 0.5rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.pair {
+  row-gap: 0.25rem;
+  align-items: baseline;
+  padding-block: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.pair-arrow {
+  color: var(--muted);
+  text-align: center;
+}
+
+.pair-status {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.pair-status.warning {
+  color: var(--warn);
+}
+
+@media (max-width: 40rem) {
+  .columns,
+  .pairing {
+    grid-template-columns: 1fr;
+  }
 }
 
 .visually-hidden {

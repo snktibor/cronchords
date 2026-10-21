@@ -19,8 +19,8 @@ export function SignIn() {
   }
 
   return (
-    <main>
-      <h1>cronchords</h1>
+    <main className="stack narrow">
+      <h1 className="wordmark">cronchords</h1>
       <form onSubmit={submit}>
         <label>
           Email
@@ -45,7 +45,9 @@ export function SignIn() {
         <button disabled={busy}>Sign in</button>
       </form>
       {error && <p role="alert">{error}</p>}
-      <p>Sign in with the user you created in your Supabase project (Authentication → Users).</p>
+      <p className="note">
+        Sign in with the user you created in your Supabase project (Authentication → Users).
+      </p>
     </main>
   )
 }
