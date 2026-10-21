@@ -1,19 +1,21 @@
 # cronchords
 
 Keeps Spotify and YouTube Music playlists in sync: from Spotify to YouTube,
-from YouTube to Spotify, or both ways. Every hour a GitHub Actions job checks
-the playlists you paired up and carries the changes over to the other side.
+from YouTube to Spotify, or both ways. Every hour a worker checks the playlists
+you paired up and carries the changes over to the other side.
 
 Everything runs on free tiers and on your own API keys: GitHub Actions for the
 sync, a Supabase database for its state, and a static dashboard that you can
-host on GitHub Pages or Vercel. There is no server to run or pay for.
+host on GitHub Pages or Vercel. There is no server to run or pay for. If you
+have one anyway, or a Raspberry Pi, the worker can run there instead of on
+GitHub Actions.
 
 ## How it works
 
 ```mermaid
 flowchart LR
     dashboard["Dashboard<br>(static site)"] -- "settings,<br>playlist pairs" --> db[("Supabase")]
-    worker["Worker<br>(GitHub Actions, hourly)"] -- "tokens, sync state,<br>match caches" --> db
+    worker["Worker<br>(hourly, on GitHub Actions<br>or your own machine)"] -- "tokens, sync state,<br>match caches" --> db
     worker -- "search, add and<br>remove songs" --> spotify["Spotify"]
     worker -- "search, add and<br>remove videos" --> youtube["YouTube"]
 ```
@@ -23,7 +25,8 @@ flowchart LR
 - `supabase/` holds the database schema: one row of settings and tokens, the
   playlist pairs, and two caches, one that maps Spotify songs (by ISRC) to
   YouTube videos and one for the other way round.
-- `worker/` is the Python script the hourly workflow runs.
+- `worker/` is the Python script that does the syncing. The hourly workflow
+  runs it, or you run it on a machine of your own.
 
 On each run the worker:
 
@@ -206,6 +209,10 @@ enough.
 
 ### 7. Turn on the hourly sync
 
+This runs the worker on GitHub Actions. To run it on a machine of your own
+instead, skip this step and see
+[Running the worker on your own machine](#running-the-worker-on-your-own-machine).
+
 1. Under Settings > Secrets and variables > Actions, add the repository secret
    `SUPABASE_SECRET_KEY` with the secret key from step 2, and the variable
    `SUPABASE_URL` if you didn't add it in step 3.
@@ -216,6 +223,95 @@ enough.
 The worker uses the secret key rather than the publishable one because it
 reads the stored tokens, which the database only shows to the dashboard's owner
 and to the secret key.
+
+## Running the worker on your own machine
+
+The worker doesn't have to run on GitHub Actions. Any computer that's always on
+will do: a Raspberry Pi, a home server or a VPS. It only makes outgoing
+requests, so it needs no open ports and no public address.
+
+Run it in one place only, since two workers syncing at the same time could add
+the same songs twice. If the Sync workflow is turned on in your fork, turn it
+off under Actions > Sync > ⋯ > Disable workflow. The dashboard stays where it
+is.
+
+The worker needs the project URL and the secret key from step 2. They go in a
+`.env` file in the `worker` folder:
+
+```sh
+git clone https://github.com/<you>/cronchords.git
+cd cronchords/worker
+cp .env.example .env
+chmod 600 .env
+```
+
+Fill in the two values in `.env`. The secret key gives full access to the
+database, so keep the file to yourself.
+
+### With Docker
+
+With [Docker](https://docs.docker.com/engine/install/) installed, in the
+`worker` folder:
+
+```sh
+docker compose up -d --build
+```
+
+This builds the image and starts the worker in the background. It syncs right
+away and then every hour, and it starts again after a reboot.
+
+- `docker compose logs -f` shows what it's doing.
+- `docker compose restart` syncs right away.
+- To update, run `git pull`, then `docker compose up -d --build` again.
+
+### Without Docker
+
+You need Python 3.11 or newer. Raspberry Pi OS and Debian have it since
+Bookworm, Ubuntu since 24.04. On these, you may have to
+`sudo apt install python3-venv` first. Then, in the `worker` folder:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+To keep the worker running, make it a systemd service. Save this as
+`/etc/systemd/system/cronchords.service`, with your user name in place of `pi`
+and the path of your clone in place of `/home/pi/cronchords`:
+
+```ini
+[Unit]
+Description=cronchords playlist sync
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/cronchords/worker
+EnvironmentFile=/home/pi/cronchords/worker/.env
+ExecStart=/home/pi/cronchords/worker/.venv/bin/python -m cronchords --every 60
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then start it, and watch the first sync:
+
+```sh
+sudo systemctl enable --now cronchords
+journalctl -u cronchords -f
+```
+
+To update, run `git pull`, then `sudo systemctl restart cronchords`.
+
+### How often it syncs
+
+`--every 60` syncs every 60 minutes, starting right away. To change it, edit
+the number in `compose.yaml` or in the service file. Syncing more often costs
+more YouTube quota, since pairs that sync from YouTube list their YouTube
+playlist on every run (see [Limits](#limits)). Without `--every`, the worker
+syncs once and exits, so you can also run it from cron.
 
 ## Troubleshooting
 
