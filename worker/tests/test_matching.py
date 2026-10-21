@@ -6,6 +6,7 @@ from cronchords.matching import (
     best_video,
     core_title,
     normalize,
+    same_title,
     spotify_query,
     youtube_query,
 )
@@ -229,3 +230,49 @@ def test_numbers_in_artist_names_and_years_are_not_part_numbers():
     assert best_track(
         video("Maroon 5 - Sugar (Official Music Video) 2015", "Maroon5VEVO", 301), [sugar]
     )
+
+
+# Replacements picked by hand
+
+DONT_STOP_ME_NOW = Track("sp13", None, "Don't Stop Me Now - Remastered 2011", ("Queen",), 209_000)
+HALLELUJAH = Track("sp14", None, "Hallelujah", ("Jeff Buckley",), 413_000)
+LOVE = Track("sp15", None, "Love", ("Taylor Swift",), 235_000)
+LOVE_STORY = Track("sp16", None, "Love Story", ("Taylor Swift",), 235_000)
+PART_1 = Track("sp17", None, "Another Brick in the Wall, Pt. 1", ("Pink Floyd",), 191_000)
+PART_2 = Track("sp18", None, "Another Brick in the Wall, Pt. 2", ("Pink Floyd",), 239_000)
+DONT_GO = Track("sp19", None, "Don't Go", ("Yazoo",), 186_000)
+IM_YOURS = Track("sp20", None, "I'm Yours", ("Jason Mraz",), 242_000)
+SAY_MY_NAME = Track("sp21", None, "Say My Name", ("Destiny's Child",), 271_000)
+
+
+@pytest.mark.parametrize(
+    ("track", "title", "channel"),
+    [
+        (RHAPSODY, "Queen – Bohemian Rhapsody (Official Video Remastered)", "Queen Official"),
+        (RHAPSODY, "Bohemian Rhapsody (Live Aid 1985)", "Queen Official"),
+        (DONT_STOP_ME_NOW, "Queen - Dont Stop Me Now", "Queen Official"),
+        (DONT_GO, "Dont Go", "Yazoo"),
+        (IM_YOURS, "Jason Mraz - Im Yours (Official Video)", "Jason Mraz"),
+        (SAY_MY_NAME, "Destinys Child - Say My Name (Official Video)", "DestinysChildVEVO"),
+        (SAY_MY_NAME, "Say My Name", "Destiny's Child - Topic"),
+        (GET_LUCKY, "Get Lucky (Radio Edit)", "Columbia Records"),
+        (PART_2, "Pink Floyd - Another Brick In The Wall (Part 2) [Official Video]", "Pink Floyd"),
+    ],
+)
+def test_same_title_takes_any_version_of_the_song(track, title, channel):
+    assert same_title(track, video(title, channel, None))
+
+
+@pytest.mark.parametrize(
+    ("track", "title", "channel"),
+    [
+        (LOVE, "Love Story (Taylor's Version)", "Taylor Swift - Topic"),
+        (LOVE_STORY, "Love", "Taylor Swift - Topic"),
+        (PART_1, "Another Brick in the Wall, Pt. 2", "Pink Floyd - Topic"),
+        (GET_LUCKY, "Daft Punk - Around the World", "Daft Punk"),
+        (HALLELUJAH, "Pentatonix - Hallelujah (Official Video)", "Pentatonix"),
+        (HALLELUJAH, "Hallelujah", "Leonard Cohen - Topic"),
+    ],
+)
+def test_same_title_tells_other_songs_apart(track, title, channel):
+    assert not same_title(track, video(title, channel, None))

@@ -144,6 +144,28 @@ class TrackFinder:
         return best_track(video, list(candidates.values()), ranked=False)
 
 
+def same_title(track: Track, video: Video) -> bool:
+    """Whether the video is titled after the track's song, whatever version of it it is.
+
+    Much looser than score(): it tells whether a song someone added in place of
+    a wrong match is meant to be the same song. Songs that only share the title
+    don't count when the video names their artist.
+    """
+    name, title = _without_apostrophes(track.name), _without_apostrophes(video.title)
+    wanted = set(core_title(FEATURING.sub("", name)).split())
+    if not wanted or len(wanted & set(normalize(title).split())) < 0.75 * len(wanted):
+        return False
+    artists = [a for a in (normalize(_without_apostrophes(a)) for a in track.artists) if a]
+    channel = normalize(_without_apostrophes(video.channel))
+    if channel.endswith(" topic") and channel.removesuffix(" topic") not in artists:
+        return False
+    artist_words = {word for artist in artists for word in artist.split()}
+    return (
+        _numbers(name, artist_words) == _numbers(title, artist_words)
+        and _unexplained(title, normalize(name), artists) < 0.5
+    )
+
+
 def score(track: Track, video: Video, rank: int = 0) -> float:
     """How likely the video is a recording of the track. 40 or more counts as a match."""
     title = normalize(video.title)
@@ -252,6 +274,11 @@ def _unexplained(title: str, name: str, artists: list[str]) -> float:
         return 0.0
     in_name = set(name.split())
     return sum(word not in in_name for word in words) / len(words)
+
+
+def _without_apostrophes(text: str) -> str:
+    # Titles spell "Don't" as "Dont" just as often.
+    return re.sub(r"['’]", "", text)
 
 
 def _mentions(title: str, channel: str, artist: str) -> bool:
