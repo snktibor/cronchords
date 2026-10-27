@@ -10,6 +10,7 @@ from cronchords.supabase import (
     DatabaseError,
     Direction,
     Side,
+    Source,
     SyncedSong,
 )
 
@@ -177,3 +178,33 @@ def test_cache_entries_can_be_added_without_overwriting():
         "resolution=merge-duplicates,return=minimal",
         "resolution=ignore-duplicates,return=minimal",
     ]
+
+
+def test_all_matched_entries_are_read_a_page_at_a_time():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+        seen.append((params["offset"], params["limit"]))
+        assert params["spotify_track_id"] == "not.is.null"
+        assert params["order"] == "youtube_video_id"
+        # A server that hands out fewer rows than asked for.
+        start = int(params["offset"])
+        rows = [
+            {
+                "youtube_video_id": f"v{i}",
+                "spotify_track_id": f"t{i}",
+                "isrc": None,
+                "searched_at": "2026-10-20T12:00:00+00:00",
+                "source": "correction" if i == 0 else "search",
+            }
+            for i in range(start, min(start + 400, 1200))
+        ]
+        return httpx.Response(200, json=rows)
+
+    entries = database(handler).get_matched_video_cache_entries()
+
+    assert seen == [("0", "1000"), ("400", "1000"), ("800", "1000"), ("1200", "1000")]
+    assert len(entries) == 1200
+    assert entries[0].source is Source.CORRECTION
+    assert entries[1].source is Source.SEARCH

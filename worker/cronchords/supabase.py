@@ -15,6 +15,9 @@ from .http import send
 # Keeps "column=in.(...)" filters well below URL length limits.
 CACHE_LOOKUP_CHUNK = 100
 
+# Supabase hands out at most 1,000 rows per request unless set up otherwise.
+PAGE_SIZE = 1000
+
 
 class DatabaseError(Exception):
     pass
@@ -204,9 +207,21 @@ class Database:
             overwrite=overwrite,
         )
 
+    def get_matched_cache_entries(self) -> list[CacheEntry]:
+        """Every Spotify track that has a video."""
+        rows = self._get_all("/track_sync_cache", "isrc", {"youtube_video_id": "not.is.null"})
+        return [_cache_entry(row) for row in rows]
+
     def get_video_cache_entries(self, video_ids: Iterable[str]) -> dict[str, VideoCacheEntry]:
         rows = self._lookup("/video_sync_cache", "youtube_video_id", video_ids)
         return {row["youtube_video_id"]: _video_cache_entry(row) for row in rows}
+
+    def get_matched_video_cache_entries(self) -> list[VideoCacheEntry]:
+        """Every YouTube video that has a Spotify track."""
+        rows = self._get_all(
+            "/video_sync_cache", "youtube_video_id", {"spotify_track_id": "not.is.null"}
+        )
+        return [_video_cache_entry(row) for row in rows]
 
     def save_video_cache_entry(self, entry: VideoCacheEntry) -> None:
         self._upsert(
@@ -227,6 +242,23 @@ class Database:
             chunk = wanted[start : start + CACHE_LOOKUP_CHUNK]
             rows += self._get(path, {"select": "*", column: f"in.({','.join(chunk)})"})
         return rows
+
+    def _get_all(self, path: str, order: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = self._get(
+                path,
+                {
+                    "select": "*",
+                    "order": order,
+                    "limit": str(PAGE_SIZE),
+                    "offset": str(len(rows)),
+                    **params,
+                },
+            )
+            if not page:
+                return rows
+            rows += page
 
     def _upsert(self, path: str, row: dict[str, Any], *, overwrite: bool = True) -> None:
         resolution = "merge-duplicates" if overwrite else "ignore-duplicates"

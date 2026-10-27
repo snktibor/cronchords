@@ -200,6 +200,15 @@ class FakeCloud:
             if request.method == "GET":
                 # Rows the tests put in get the column defaults, as in the database.
                 stored = [{"source": "search", **row} for row in rows.values()]
+                if "offset" in params:
+                    # Every matched entry, a page at a time.
+                    [column] = [k for k, v in params.items() if v == "not.is.null"]
+                    matched = sorted(
+                        (row for row in stored if row.get(column) is not None),
+                        key=lambda row: row[params["order"]],
+                    )
+                    start = int(params["offset"])
+                    return httpx.Response(200, json=matched[start : start + int(params["limit"])])
                 [(column, condition)] = [(k, v) for k, v in params.items() if k != "select"]
                 wanted = re.fullmatch(r"in\.\((.*)\)", condition).group(1).split(",")
                 return httpx.Response(200, json=[row for row in stored if row[column] in wanted])
