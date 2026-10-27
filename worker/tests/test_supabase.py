@@ -149,6 +149,7 @@ def test_videos_can_be_looked_up_by_the_tracks_they_were_matched_to():
             "spotify_track_id": "t1",
             "youtube_video_id": "v1",
             "searched_at": "2026-10-20T12:00:00+00:00",
+            "source": "search",
         }
         return httpx.Response(
             200, json=[row, row | {"isrc": "GBUM70000000", "spotify_track_id": "t2"}]

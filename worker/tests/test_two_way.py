@@ -335,6 +335,7 @@ def test_a_song_with_the_same_title_takes_the_place_of_a_removed_copy(cloud):
     assert (GET_LUCKY.track_id, "lucky") not in pairs(cloud)
     # Other playlists with the song get this video from now on.
     assert cloud.cache[GET_LUCKY.isrc]["youtube_video_id"] == "lucky-edit"
+    assert cloud.cache[GET_LUCKY.isrc]["source"] == "correction"
 
 
 def test_a_replacement_can_be_replaced_too(cloud):
@@ -366,6 +367,7 @@ def test_a_track_copied_to_spotify_can_be_replaced_the_same_way(cloud):
     assert cloud.youtube_searches() == []
     assert ("dreams-2004", "dreams") in pairs(cloud)
     assert cloud.video_cache["dreams"]["spotify_track_id"] == "dreams-2004"
+    assert cloud.video_cache["dreams"]["source"] == "correction"
 
 
 def test_without_a_replacement_the_song_is_removed_after_the_wait(cloud):

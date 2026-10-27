@@ -198,11 +198,11 @@ class FakeCloud:
                 else (self.video_cache, "youtube_video_id")
             )
             if request.method == "GET":
+                # Rows the tests put in get the column defaults, as in the database.
+                stored = [{"source": "search", **row} for row in rows.values()]
                 [(column, condition)] = [(k, v) for k, v in params.items() if k != "select"]
                 wanted = re.fullmatch(r"in\.\((.*)\)", condition).group(1).split(",")
-                return httpx.Response(
-                    200, json=[row for row in rows.values() if row[column] in wanted]
-                )
+                return httpx.Response(200, json=[row for row in stored if row[column] in wanted])
             if request.method == "POST":
                 prefer = request.headers["Prefer"]
                 if "merge-duplicates" in prefer or body[key] not in rows:

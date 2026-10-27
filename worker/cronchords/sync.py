@@ -38,6 +38,7 @@ from .supabase import (
     Direction,
     Mapping,
     Side,
+    Source,
     SyncedSong,
     VideoCacheEntry,
 )
@@ -558,11 +559,13 @@ class Syncer:
             log.info("[%s] %s replaces the removed video of %s", mapping.label, video, track)
             if track.isrc:
                 # Playlists that get this song later get this video too.
-                self.db.save_cache_entry(CacheEntry(track.isrc, track.id, video.id, self.now()))
+                self.db.save_cache_entry(
+                    CacheEntry(track.isrc, track.id, video.id, self.now(), Source.CORRECTION)
+                )
         else:
             log.info("[%s] %s replaces the removed track of %s", mapping.label, track, video)
             self.db.save_video_cache_entry(
-                VideoCacheEntry(video.id, track.id, track.isrc, self.now())
+                VideoCacheEntry(video.id, track.id, track.isrc, self.now(), Source.CORRECTION)
             )
         # The replacement can be replaced in turn, for as long as the copy could.
         songs.copies[side, video_id if side is Side.YOUTUBE else track_id] = songs.copies[copy]
