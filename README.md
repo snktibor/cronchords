@@ -317,9 +317,11 @@ syncs once and exits, so you can also run it from cron.
 ## Sharing matches
 
 Every cronchords user searches for many of the same songs, and YouTube allows
-only 100 searches a day. You can share the matches your worker found, so that
-a shared cache can collect them from every fork that does. Sharing is off
-unless you turn it on.
+only 100 searches a day. You can share the matches your worker found with
+[youtube-spotify-mapper](https://github.com/snktibor/youtube-spotify-mapper),
+an open list of Spotify tracks and their YouTube videos. It collects the
+matches from every fork that shares them, checks them, and publishes them for
+anyone to use. Sharing is off unless you turn it on.
 
 To turn it on, add the variable `SHARE_MATCHES` with the value `true` under
 Settings > Secrets and variables > Actions > Variables. Once a day, the "Share
@@ -334,8 +336,9 @@ or by editing its row in the Supabase table editor. Your playlists aren't in
 it, neither their names nor which songs are on which. The file is public like
 the rest of your fork, though, so anyone can see which songs you sync.
 
-Only forks of this repository can take part, since that's where the shared
-cache looks. If the worker runs on your own machine, the workflow can still
+youtube-spotify-mapper finds the forks of this repository on its own. A copy
+that isn't a fork can take part too, once it's added to the list's
+`sources.txt`. If the worker runs on your own machine, the workflow can still
 share: add the `SUPABASE_URL` variable and the `SUPABASE_SECRET_KEY` secret as
 in step 7 and leave the "Share matches" workflow on. It only reads the
 database, so it doesn't get in the worker's way. You can also share from your
