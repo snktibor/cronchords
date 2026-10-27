@@ -1,0 +1,44 @@
+name: Share matches
+
+on:
+  schedule:
+    # Daily: the shared cache doesn't need the matches any sooner.
+    - cron: "43 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  share:
+    # Opt-in, see "Sharing matches" in the README.
+    if: vars.SHARE_MATCHES == 'true' && vars.SUPABASE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # For the cronchords-export branch, which the worker writes through the API.
+      contents: write
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The token is only for the worker, git doesn't need it.
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Share matches
+        run: python -m cronchords --share
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
