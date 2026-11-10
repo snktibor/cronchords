@@ -1,6 +1,6 @@
 # cronchords
 
-> The `site/` folder is the source of [cronchords.xyz](https://cronchords.xyz),
+> The `site/` folder is the source of [cronchords.snktibor.hu](https://cronchords.snktibor.hu),
 > the project's landing page. You don't need it to self-host: the dashboard is
 > in `web/`. If you host the dashboard on Vercel, set the root directory to
 > `web`, not `site`.
