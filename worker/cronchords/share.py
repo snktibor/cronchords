@@ -49,14 +49,18 @@ def share(db: Database, http: httpx.Client, repository: str, token: str) -> None
 
 
 def export(entries: Iterable[CacheEntry], video_entries: Iterable[VideoCacheEntry]) -> bytes:
-    """The matches the way pairs.json holds them, the same bytes for the same matches."""
+    """The matches the way pairs.json holds them, the same bytes for the same matches.
+
+    Matches taken from the shared list are left out: they would come back to
+    it as votes of their own.
+    """
     found = [
         *((e.spotify_track_id, e.youtube_video_id, e.isrc, e.source) for e in entries),
         *((e.spotify_track_id, e.youtube_video_id, e.isrc, e.source) for e in video_entries),
     ]
     pairs: dict[tuple[str, str], dict[str, str]] = {}
     for track_id, video_id, isrc, source in found:
-        if not track_id or not video_id:
+        if not track_id or not video_id or source is Source.SHARED:
             continue
         pair = pairs.setdefault(
             (track_id, video_id), {"track": track_id, "video": video_id, "source": source}

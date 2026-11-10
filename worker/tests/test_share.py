@@ -193,6 +193,18 @@ def test_the_export_is_the_same_for_the_same_matches():
     )
 
 
+def test_matches_taken_from_the_shared_list_are_not_shared_again():
+    entries = [
+        CacheEntry("ISRC1", "t1", "v1", NOW, Source.SHARED),
+        CacheEntry("ISRC2", "t2", "v2", NOW),
+    ]
+    video_entries = [VideoCacheEntry("v1", "t1", "ISRC1", NOW, Source.SHARED)]
+
+    pairs = json.loads(export(entries, video_entries))["pairs"]
+
+    assert [pair["track"] for pair in pairs] == ["t2"]
+
+
 def test_blob_sha_is_the_one_git_gives():
     # printf 'hello\n' | git hash-object --stdin
     assert blob_sha(b"hello\n") == "ce013625030ba8dba906f756967f9e9ca394464a"

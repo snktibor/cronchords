@@ -61,6 +61,8 @@ class Source(StrEnum):
     SEARCH = "search"
     # A person replaced the worker's match, see sync.py, or edited the row.
     CORRECTION = "correction"
+    # Taken from the list of shared matches, see shared.py. It isn't shared again.
+    SHARED = "shared"
 
 
 @dataclass(frozen=True)
