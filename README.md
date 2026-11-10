@@ -223,6 +223,10 @@ instead, skip this step and see
 2. GitHub turns off workflows in forks. Open the Actions tab and enable them.
 3. Run the "Sync" workflow once by hand to see that everything works. From then
    on it runs every hour.
+4. Once a day, the "Share matches" workflow shares the songs your worker
+   matched with other users. Which songs you sync becomes public that way. To
+   keep them to yourself, add the variable `SHARE_MATCHES` with the value
+   `false`, see [Sharing matches](#sharing-matches).
 
 The worker uses the secret key rather than the publishable one because it
 reads the stored tokens, which the database only shows to the dashboard's owner
@@ -324,7 +328,8 @@ only 100 searches a day. You can share the matches your worker found with
 [youtube-spotify-mapper](https://github.com/snktibor/youtube-spotify-mapper),
 an open list of Spotify tracks and their YouTube videos. It collects the
 matches from every fork that shares them, checks them, and publishes them for
-anyone to use. Sharing is off unless you turn it on.
+anyone to use. Sharing is on unless you turn it off, and so is using the
+matches others shared.
 
 ### Using the shared matches
 
@@ -353,10 +358,8 @@ machine.
 
 ### Sharing your matches
 
-To turn it on, add the variable `SHARE_MATCHES` with the value `true` under
-Settings > Secrets and variables > Actions > Variables. Once a day, the "Share
-matches" workflow then writes the matches to `pairs.json` on a branch of your
-fork called `cronchords-export`. The branch holds nothing else and shares no
+Once a day, the "Share matches" workflow writes the matches to `pairs.json` on
+a branch of your fork called `cronchords-export`. The branch holds nothing else and shares no
 history with the code, so it doesn't get in the way when you sync your fork.
 
 For every song with a match, the file holds the Spotify track ID, the YouTube
@@ -366,11 +369,17 @@ or by editing its row in the Supabase table editor. Your playlists aren't in
 it, neither their names nor which songs are on which. The file is public like
 the rest of your fork, though, so anyone can see which songs you sync.
 
+To turn sharing off, add the variable `SHARE_MATCHES` with the value `false`
+under Settings > Secrets and variables > Actions > Variables, or disable the
+"Share matches" workflow in the Actions tab. To take back what was shared,
+delete the `cronchords-export` branch as well: the list drops your matches
+with its next update.
+
 youtube-spotify-mapper finds the forks of this repository on its own. A copy
 that isn't a fork can take part too, once it's added to the list's
-`sources.txt`. If the worker runs on your own machine, the workflow can still
-share: add the `SUPABASE_URL` variable and the `SUPABASE_SECRET_KEY` secret as
-in step 7 and leave the "Share matches" workflow on. It only reads the
+`sources.txt`. If the worker runs on your own machine, the workflow only
+shares once you add the `SUPABASE_URL` variable and the `SUPABASE_SECRET_KEY`
+secret as in step 7. It only reads the
 database, so it doesn't get in the worker's way. You can also share from your
 machine with `python -m cronchords --share`, given `GITHUB_REPOSITORY` (your
 fork, as `you/cronchords`) and `GITHUB_TOKEN` (a fine-grained token for your

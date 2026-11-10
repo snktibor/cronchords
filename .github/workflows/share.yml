@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   share:
-    # Opt-in, see "Sharing matches" in the README.
-    if: vars.SHARE_MATCHES == 'true' && vars.SUPABASE_URL != ''
+    # On unless SHARE_MATCHES is false, see "Sharing matches" in the README.
+    if: vars.SHARE_MATCHES != 'false' && vars.SUPABASE_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

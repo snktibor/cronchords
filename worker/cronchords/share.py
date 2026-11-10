@@ -1,6 +1,6 @@
 """Shares the matches found so far with youtube-spotify-mapper, a list anyone can use.
 
-Sharing is opt-in, see "Sharing matches" in the README. The matches go to
+Sharing is on unless it's turned off, see "Sharing matches" in the README. The matches go to
 pairs.json, the only file on the cronchords-export branch of the repository
 the worker runs from, where youtube-spotify-mapper collects them. The branch has no
 history in common with the code: every share replaces its single commit, and
