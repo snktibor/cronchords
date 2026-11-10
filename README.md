@@ -1,5 +1,10 @@
 # cronchords
 
+> The `site/` folder is the source of [cronchords.xyz](https://cronchords.xyz),
+> the project's landing page. You don't need it to self-host: the dashboard is
+> in `web/`. If you host the dashboard on Vercel, set the root directory to
+> `web`, not `site`.
+
 Keeps Spotify and YouTube Music playlists in sync: from Spotify to YouTube,
 from YouTube to Spotify, or both ways. Every hour a worker checks the playlists
 you paired up and carries the changes over to the other side.
@@ -161,7 +166,8 @@ Google, so deploy it first. Either option is free.
 **Vercel**
 
 1. Import your fork on [vercel.com](https://vercel.com/new) and set the root
-   directory to `web`. Vite is detected automatically.
+   directory to `web` (not `site`, which is the landing page). Vite is detected
+   automatically.
 2. Add the environment variables `VITE_SUPABASE_URL` and
    `VITE_SUPABASE_PUBLISHABLE_KEY`.
 3. Deploy. Netlify and Cloudflare Pages work the same way: build `web` with
@@ -449,4 +455,5 @@ The dev server runs on `http://127.0.0.1:5173/`. Open it there rather than on
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The license covers the code; the cronchords name and logo are
+not covered by it.
