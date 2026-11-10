@@ -24,6 +24,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar
 
 from . import matching
+from .shared import Hint, SharedList
 from .spotify import (
     WRITE_BATCH,
     PlaylistChangedError,
@@ -65,6 +66,9 @@ REPLACEMENT_WAIT = timedelta(hours=12)
 
 # videos.list takes up to 50 ids at a time.
 VIDEO_BATCH = 50
+
+# How many of the pairs the shared list has for a song are checked at most.
+SHARED_HINTS = 5
 
 DIRECTIONS = {
     Direction.SPOTIFY_TO_YOUTUBE: "Spotify → YouTube",
@@ -256,12 +260,16 @@ class Syncer:
         spotify: SpotifyClient,
         youtube: YouTubeClient,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        shared: SharedList | None = None,
     ):
         self.db = db
         self.spotify = spotify
         self.youtube = youtube
         self.now = now
+        self.shared = shared
         self.search_exhausted = False
+        # Songs matched from the shared list instead of a search.
+        self.shared_matches = 0
 
     def run(self, mappings: list[Mapping]) -> RunResult:
         result = RunResult()
@@ -624,7 +632,7 @@ class Syncer:
                 continue
             entry = searched.get(video.id)
             if entry is None or self._should_search_again(entry.searched_at):
-                entry = self._search_spotify(video)
+                entry = self._shared_track(video) or self._search_spotify(video)
             if entry.spotify_track_id is None:
                 changes.unmatched += 1
                 continue
@@ -656,19 +664,22 @@ class Syncer:
         for track in tracks:
             entry = cache.get(track.isrc) if track.isrc else None
             if track.isrc and track.id in is_new and self._needs_search(entry, playlists):
-                if self.search_exhausted:
+                if shared := self._shared_video(track, playlists):
+                    entry = cache[track.isrc] = shared
+                elif self.search_exhausted:
                     changes.pending += 1
                     continue
-                try:
-                    entry = cache[track.isrc] = self._search_youtube(track)
-                except SearchQuotaExceededError:
-                    log.warning(
-                        "Daily YouTube search limit reached, the remaining songs are "
-                        "searched after it resets"
-                    )
-                    self.search_exhausted = True
-                    changes.pending += 1
-                    continue
+                else:
+                    try:
+                        entry = cache[track.isrc] = self._search_youtube(track)
+                    except SearchQuotaExceededError:
+                        log.warning(
+                            "Daily YouTube search limit reached, the remaining songs are "
+                            "searched after it resets"
+                        )
+                        self.search_exhausted = True
+                        changes.pending += 1
+                        continue
 
             video_id = entry.youtube_video_id if entry else None
             if video_id is None or video_id in playlists.dead:
@@ -767,6 +778,44 @@ class Syncer:
                 playlists.video(video_id),
             )
 
+    def _shared_video(self, track: Track, playlists: Playlists) -> CacheEntry | None:
+        """The track's video from the shared list, if one of them passes the matching rules."""
+        if self.shared is None or not track.isrc:
+            return None
+        hints = [h for h in self.shared.videos(track.isrc) if h.video_id not in playlists.dead]
+        hints = hints[:SHARED_HINTS]
+        if not hints:
+            return None
+        videos = {video.id: video for video in self.youtube.videos([h.video_id for h in hints])}
+        for hint in hints:
+            video = videos.get(hint.video_id)
+            if video and _confirms(hint, track, video):
+                log.info("%s is %s, says the shared list", track, video)
+                entry = CacheEntry(track.isrc, track.id, video.id, self.now(), Source.SHARED)
+                self.db.save_cache_entry(entry)
+                self.shared_matches += 1
+                return entry
+        return None
+
+    def _shared_track(self, video: Video) -> VideoCacheEntry | None:
+        """The video's track from the shared list, if one of them passes the matching rules."""
+        if self.shared is None:
+            return None
+        for hint in self.shared.tracks(video.id)[:SHARED_HINTS]:
+            track = self.spotify.get_track(hint.track_id)
+            if track and _confirms(hint, track, video):
+                log.info("%s is %s, says the shared list", video, track)
+                entry = VideoCacheEntry(video.id, track.id, track.isrc, self.now(), Source.SHARED)
+                self.db.save_video_cache_entry(entry)
+                if track.isrc:
+                    self.db.save_cache_entry(
+                        CacheEntry(track.isrc, track.id, video.id, self.now(), Source.SHARED),
+                        overwrite=False,
+                    )
+                self.shared_matches += 1
+                return entry
+        return None
+
     def _search_youtube(self, track: Track) -> CacheEntry:
         videos = self.youtube.search(matching.youtube_query(track))
         best = matching.best_video(track, self._with_durations(videos))
@@ -812,6 +861,18 @@ class Syncer:
 
     def _should_search_again(self, searched_at: datetime) -> bool:
         return self.now() - searched_at >= RETRY_UNMATCHED_AFTER
+
+
+def _confirms(hint: Hint, track: Track, video: Video) -> bool:
+    """Whether a pair from the shared list holds up here too.
+
+    Pairs a person picked only need the video to be titled after the song,
+    the way youtube-spotify-mapper checks them: they may be right where the
+    matching rules are wrong. The others have to pass the rules.
+    """
+    if matching.score(track, video) >= matching.MIN_SCORE:
+        return True
+    return hint.picked and matching.same_title(track, video)
 
 
 def fingerprint(items: Iterable[PlaylistItem]) -> str:

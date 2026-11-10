@@ -22,6 +22,7 @@ from types import FrameType
 import httpx
 
 from . import share, spotify, youtube
+from .shared import SharedList
 from .supabase import AppConfig, Database, DatabaseError
 from .sync import Syncer
 
@@ -192,19 +193,27 @@ def run(
 
     sp = spotify.SpotifyClient(http, spotify_token)
     yt = youtube.YouTubeClient(http, youtube_token)
-    result = Syncer(db, sp, yt, now=now).run(mappings)
+    shared = SharedList(http) if use_shared_matches() else None
+    syncer = Syncer(db, sp, yt, now=now, shared=shared)
+    result = syncer.run(mappings)
 
     log.info(
         "Done: %d of %d playlist(s) synced, %d failed. YouTube quota used: ~%d units, "
-        "%d searches. Spotify searches: %d.",
+        "%d searches. Spotify searches: %d. Matches from the shared list: %d.",
         result.synced,
         len(mappings),
         result.failed,
         yt.units_used,
         yt.searches,
         sp.searches,
+        syncer.shared_matches,
     )
     return 1 if result.failed else 0
+
+
+def use_shared_matches() -> bool:
+    """Whether to look songs up in the shared list first, see shared.py."""
+    return os.environ.get("USE_SHARED_MATCHES", "").strip().lower() != "false"
 
 
 def spotify_access_token(db: Database, http: httpx.Client, config: AppConfig) -> str:

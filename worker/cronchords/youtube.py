@@ -176,6 +176,29 @@ class YouTubeClient:
                 durations[item["id"]] = seconds
         return durations
 
+    def videos(self, video_ids: list[str]) -> list[Video]:
+        """Up to 50 videos with their titles and lengths. Deleted and private ones are left out."""
+        if not video_ids:
+            return []
+        page = self._call(
+            "GET",
+            "videos",
+            params={
+                "part": "snippet,contentDetails",
+                "id": ",".join(video_ids),
+                "fields": "items(id,snippet(title,channelTitle),contentDetails/duration)",
+            },
+        )
+        return [
+            Video(
+                id=item["id"],
+                title=item["snippet"].get("title") or "",
+                channel=item["snippet"].get("channelTitle") or "",
+                duration_s=parse_duration(item["contentDetails"].get("duration", "")),
+            )
+            for item in page.get("items", [])
+        ]
+
     def add_to_playlist(self, playlist_id: str, video_id: str) -> PlaylistItem:
         item = self._call(
             "POST",

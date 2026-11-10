@@ -150,6 +150,10 @@ class SpotifyClient:
         items = (body.get("tracks") or {}).get("items") or []
         return [track for track in map(_parse_track, items) if track]
 
+    def get_track(self, track_id: str) -> Track | None:
+        """The track, or None if Spotify doesn't know it."""
+        return _parse_track(self._call("GET", f"/tracks/{track_id}", missing_ok=True))
+
     def add_tracks(self, playlist_id: str, track_ids: list[str]) -> None:
         for batch in _batches(track_ids):
             uris = [f"spotify:track:{track_id}" for track_id in batch]
@@ -161,10 +165,15 @@ class SpotifyClient:
             items = [{"uri": f"spotify:track:{track_id}"} for track_id in batch]
             self._call("DELETE", f"/playlists/{playlist_id}/items", json={"items": items})
 
-    def _call(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+    def _call(
+        self, method: str, path: str, *, missing_ok: bool = False, **kwargs: Any
+    ) -> dict[str, Any]:
         response = send(self._http, method, f"{API_URL}{path}", headers=self._headers, **kwargs)
         if response.is_success:
             return response.json() if response.content else {}
+        # An id Spotify doesn't know is a 404, a malformed one a 400.
+        if missing_ok and response.status_code in (400, 404):
+            return {}
 
         message = _api_error(response)
         if response.status_code == 429:
