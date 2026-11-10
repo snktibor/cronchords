@@ -24,7 +24,8 @@ flowchart LR
   Spotify and YouTube accounts and to pick which playlists to sync.
 - `supabase/` holds the database schema: one row of settings and tokens, the
   playlist pairs, and two caches, one that maps Spotify songs (by ISRC) to
-  YouTube videos and one for the other way round.
+  YouTube videos and one for the other way round. You can share the caches
+  with other users, see [Sharing matches](#sharing-matches).
 - `worker/` is the Python script that does the syncing. The hourly workflow
   runs it, or you run it on a machine of your own.
 
@@ -44,6 +45,8 @@ On each run the worker:
      playlist already (maybe as another release), and otherwise searches
      Spotify with the video's title, cleaned of "(Official Video)" and the
      like.
+   - Before it searches, it looks the song up in the matches other users
+     shared, see [Sharing matches](#sharing-matches).
 
    Title, artist and length have to match, and covers, live versions, remixes
    and the like only match each other.
@@ -90,8 +93,9 @@ disappearing from Spotify.
   same song in a second playlist only costs the 50 units. Removing a song from
   YouTube costs 50 units as well. Pairs that sync from YouTube also list their
   YouTube playlist on every run, which costs 1 unit per 50 videos, so about 24
-  units a day for a playlist of up to 50 songs. You can ask Google for more
-  quota if you need it.
+  units a day for a playlist of up to 50 songs. Songs found in the
+  [shared matches](#using-the-shared-matches) don't need a search either. You
+  can ask Google for more quota if you need it.
 - **Spotify.** Apps in Development Mode need an owner with Spotify Premium, and
   can only read and change playlists you own or collaborate on. Searching
   Spotify has no daily limit, so songs from YouTube aren't held back by a
@@ -312,6 +316,72 @@ the number in `compose.yaml` or in the service file. Syncing more often costs
 more YouTube quota, since pairs that sync from YouTube list their YouTube
 playlist on every run (see [Limits](#limits)). Without `--every`, the worker
 syncs once and exits, so you can also run it from cron.
+
+## Sharing matches
+
+Every cronchords user searches for many of the same songs, and YouTube allows
+only 100 searches a day. You can share the matches your worker found with
+[youtube-spotify-mapper](https://github.com/snktibor/youtube-spotify-mapper),
+an open list of Spotify tracks and their YouTube videos. It collects the
+matches from every fork that shares them, checks them, and publishes them for
+anyone to use. Sharing is off unless you turn it on.
+
+### Using the shared matches
+
+Before the worker searches for a song it hasn't seen yet, it looks the song up
+in that list. If the list has the song, the worker looks up the videos it
+names, which costs 1 unit of the YouTube quota instead of the 100 of a search,
+and it works after the day's searches are used up too. The other way round, it
+looks up the Spotify tracks the list has for a video instead of searching
+Spotify.
+
+The worker doesn't take a match from the list on trust. It checks it with the
+same rules as its own search results, so a wrong match someone shared doesn't
+get into your playlists. Matches that a person picked, by correcting one, only
+need the video to be titled after the song: they may be right where the rules
+are wrong. If no match from the list holds up, or the list can't be read, the
+worker searches as usual. The cache comes first, so a match you corrected
+stays yours.
+
+Matches taken from the list are marked `shared` in the cache, and they aren't
+shared again. Reading the list sends nothing about your playlists anywhere:
+the worker downloads the list's files, each covering 1/256 of the songs. To
+turn it off, add the variable `USE_SHARED_MATCHES` with the value `false`
+under Settings > Secrets and variables > Actions > Variables, or put
+`USE_SHARED_MATCHES=false` in the worker's `.env` if it runs on your own
+machine.
+
+### Sharing your matches
+
+To turn it on, add the variable `SHARE_MATCHES` with the value `true` under
+Settings > Secrets and variables > Actions > Variables. Once a day, the "Share
+matches" workflow then writes the matches to `pairs.json` on a branch of your
+fork called `cronchords-export`. The branch holds nothing else and shares no
+history with the code, so it doesn't get in the way when you sync your fork.
+
+For every song with a match, the file holds the Spotify track ID, the YouTube
+video ID, the ISRC, and whether a person corrected the match: by replacing a
+song in a pair that syncs both ways (see [Sync directions](#sync-directions)),
+or by editing its row in the Supabase table editor. Your playlists aren't in
+it, neither their names nor which songs are on which. The file is public like
+the rest of your fork, though, so anyone can see which songs you sync.
+
+youtube-spotify-mapper finds the forks of this repository on its own. A copy
+that isn't a fork can take part too, once it's added to the list's
+`sources.txt`. If the worker runs on your own machine, the workflow can still
+share: add the `SUPABASE_URL` variable and the `SUPABASE_SECRET_KEY` secret as
+in step 7 and leave the "Share matches" workflow on. It only reads the
+database, so it doesn't get in the worker's way. You can also share from your
+machine with `python -m cronchords --share`, given `GITHUB_REPOSITORY` (your
+fork, as `you/cronchords`) and `GITHUB_TOKEN` (a fine-grained token for your
+fork alone, with read and write access to its contents) in the environment.
+
+## Updating
+
+To update, click "Sync fork" on your fork's page on GitHub. If the update
+brings new files to `supabase/migrations`, run them in the SQL Editor as in
+step 2, oldest first, before the next sync. If the worker runs on your own
+machine, update it as described there as well.
 
 ## Troubleshooting
 

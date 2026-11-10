@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Callable
@@ -78,6 +79,12 @@ class FakeCloud:
     # False: the token lacks the playlist-modify scopes
     spotify_can_edit: bool = True
     spotify_rate_limited: bool = False
+    # The list of shared matches: ISRC -> its rows, and video id -> its rows,
+    # the way youtube-spotify-mapper publishes them
+    shared_isrcs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    shared_videos: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    shared_version: int = 1
+    shared_down: bool = False
     # Called after a page of a Spotify playlist was served, to edit it mid-read
     while_reading_spotify: Callable[[], None] | None = None
     # Videos the next YouTube playlist listing skips, as paging does when the
@@ -137,6 +144,13 @@ class FakeCloud:
         self.spotify_catalog[entry["item"]["id"]] = entry["item"]
         self.spotify_search_results.setdefault(query, []).append(entry["item"]["id"])
 
+    def share(self, song: Any, video_id: str | None = None, source: str = "matched") -> None:
+        """Put a pair in the list of shared matches: the song's track and a video."""
+        video_id = video_id or song.video_id
+        row = {"track": song.track_id, "source": source, "votes": 1}
+        self.shared_isrcs.setdefault(song.isrc, []).append(row | {"video": video_id})
+        self.shared_videos.setdefault(video_id, []).append(row | {"isrc": song.isrc})
+
     def spotify_track_ids(self, playlist_id: str) -> list[str]:
         return [entry["item"]["id"] for entry in self.spotify_playlists[playlist_id]["entries"]]
 
@@ -164,6 +178,8 @@ class FakeCloud:
             return self._google_token(request)
         if host == "www.googleapis.com":
             return self._youtube(request)
+        if host == "raw.githubusercontent.com":
+            return self._shared_list(request)
         raise AssertionError(f"unexpected request to {request.url}")
 
     # Supabase (PostgREST)
@@ -198,11 +214,20 @@ class FakeCloud:
                 else (self.video_cache, "youtube_video_id")
             )
             if request.method == "GET":
+                # Rows the tests put in get the column defaults, as in the database.
+                stored = [{"source": "search", **row} for row in rows.values()]
+                if "offset" in params:
+                    # Every matched entry, a page at a time.
+                    [column] = [k for k, v in params.items() if v == "not.is.null"]
+                    matched = sorted(
+                        (row for row in stored if row.get(column) is not None),
+                        key=lambda row: row[params["order"]],
+                    )
+                    start = int(params["offset"])
+                    return httpx.Response(200, json=matched[start : start + int(params["limit"])])
                 [(column, condition)] = [(k, v) for k, v in params.items() if k != "select"]
                 wanted = re.fullmatch(r"in\.\((.*)\)", condition).group(1).split(",")
-                return httpx.Response(
-                    200, json=[row for row in rows.values() if row[column] in wanted]
-                )
+                return httpx.Response(200, json=[row for row in stored if row[column] in wanted])
             if request.method == "POST":
                 prefer = request.headers["Prefer"]
                 if "merge-duplicates" in prefer or body[key] not in rows:
@@ -244,6 +269,10 @@ class FakeCloud:
             return httpx.Response(
                 200, json={"tracks": {"items": [self.spotify_catalog[i] for i in ids]}}
             )
+
+        if track := re.fullmatch(r"/v1/tracks/([^/]+)", request.url.path):
+            item = self.spotify_catalog.get(track.group(1))
+            return httpx.Response(200, json=item) if item else _spotify_error(404, "Not found")
 
         match = re.fullmatch(r"/v1/playlists/([^/]+)(/items)?", request.url.path)
         playlist = self.spotify_playlists.get(match.group(1)) if match else None
@@ -341,7 +370,14 @@ class FakeCloud:
                 200,
                 json={
                     "items": [
-                        {"id": vid, "contentDetails": {"duration": self.videos[vid].duration}}
+                        {
+                            "id": vid,
+                            "snippet": {
+                                "title": self.videos[vid].title,
+                                "channelTitle": self.videos[vid].channel,
+                            },
+                            "contentDetails": {"duration": self.videos[vid].duration},
+                        }
                         for vid in ids
                         if vid in self.videos and not self.videos[vid].removed
                     ]
@@ -381,6 +417,23 @@ class FakeCloud:
             return httpx.Response(204)
 
         raise AssertionError(f"unexpected YouTube call {request.method} {request.url}")
+
+    # youtube-spotify-mapper
+
+    def _shared_list(self, request: httpx.Request) -> httpx.Response:
+        if self.shared_down:
+            return httpx.Response(403)
+        path = request.url.path.removeprefix("/snktibor/youtube-spotify-mapper/main/data/")
+        if path == "index.json":
+            return httpx.Response(200, json={"version": self.shared_version})
+        folder, name = path.split("/")
+        rows = self.shared_isrcs if folder == "isrc" else self.shared_videos
+        shard = {
+            key: entries
+            for key, entries in rows.items()
+            if hashlib.sha1(key.encode()).hexdigest()[:2] == name.removesuffix(".json")
+        }
+        return httpx.Response(200, json=shard) if shard else httpx.Response(404)
 
     def _playlist_item(self, playlist_id: str, video_id: str) -> dict[str, Any]:
         snippet: dict[str, Any] = {

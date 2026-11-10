@@ -1,8 +1,9 @@
-"""Sync the playlists: python -m cronchords [--every MINUTES]
+"""Sync the playlists: python -m cronchords [--every MINUTES | --share]
 
 Without --every it syncs once and exits, the way the GitHub Actions workflow
 runs it. With it, it keeps running and syncs every so many minutes, for a
-machine of your own such as a Raspberry Pi.
+machine of your own such as a Raspberry Pi. With --share it shares the matches
+found so far instead, see share.py.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ from types import FrameType
 
 import httpx
 
-from . import spotify, youtube
+from . import share, spotify, youtube
+from .shared import SharedList
 from .supabase import AppConfig, Database, DatabaseError
 from .sync import Syncer
 
@@ -41,6 +43,13 @@ def main(argv: list[str] | None = None) -> int:
     if not url or not key:
         log.error("SUPABASE_URL and SUPABASE_SECRET_KEY have to be set")
         return 1
+    if args.share:
+        repository = os.environ.get("GITHUB_REPOSITORY", "").strip()
+        token = os.environ.get("GITHUB_TOKEN", "").strip()
+        if not repository or not token:
+            log.error("Sharing needs GITHUB_REPOSITORY (owner/name) and GITHUB_TOKEN to be set")
+            return 1
+        return share_once(url, key, repository, token)
     if args.every is None:
         return sync_once(url, key)
 
@@ -56,11 +65,17 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         prog="python -m cronchords",
         description="Sync the playlist pairs set up in the dashboard.",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--every",
         type=minutes,
         metavar="MINUTES",
         help="keep running and sync every MINUTES minutes, starting right away",
+    )
+    mode.add_argument(
+        "--share",
+        action="store_true",
+        help="don't sync, share the matches found so far (see the README)",
     )
     return parser.parse_args(argv)
 
@@ -110,11 +125,36 @@ def keep_syncing(
 
 
 def sync_once(url: str, key: str, transport: httpx.BaseTransport | None = None) -> int:
+    return connected(url, key, run, transport)
+
+
+def share_once(
+    url: str, key: str, repository: str, token: str, transport: httpx.BaseTransport | None = None
+) -> int:
+    def run_share(db: Database, http: httpx.Client) -> int:
+        share.share(db, http, repository, token)
+        return 0
+
+    return connected(url, key, run_share, transport)
+
+
+def connected(
+    url: str,
+    key: str,
+    work: Callable[[Database, httpx.Client], int],
+    transport: httpx.BaseTransport | None = None,
+) -> int:
+    """Run work with the database and an HTTP client, logging the errors it stops with."""
     db = Database(url, key, transport=transport)
     try:
         with httpx.Client(timeout=30, transport=transport) as http:
-            return run(db, http)
-    except (DatabaseError, spotify.SpotifyError, youtube.YouTubeError) as exc:
+            return work(db, http)
+    except (
+        DatabaseError,
+        spotify.SpotifyError,
+        youtube.YouTubeError,
+        share.ShareError,
+    ) as exc:
         log.error("%s", exc)
         return 1
     except httpx.TransportError as exc:
@@ -153,19 +193,27 @@ def run(
 
     sp = spotify.SpotifyClient(http, spotify_token)
     yt = youtube.YouTubeClient(http, youtube_token)
-    result = Syncer(db, sp, yt, now=now).run(mappings)
+    shared = SharedList(http) if use_shared_matches() else None
+    syncer = Syncer(db, sp, yt, now=now, shared=shared)
+    result = syncer.run(mappings)
 
     log.info(
         "Done: %d of %d playlist(s) synced, %d failed. YouTube quota used: ~%d units, "
-        "%d searches. Spotify searches: %d.",
+        "%d searches. Spotify searches: %d. Matches from the shared list: %d.",
         result.synced,
         len(mappings),
         result.failed,
         yt.units_used,
         yt.searches,
         sp.searches,
+        syncer.shared_matches,
     )
     return 1 if result.failed else 0
+
+
+def use_shared_matches() -> bool:
+    """Whether to look songs up in the shared list first, see shared.py."""
+    return os.environ.get("USE_SHARED_MATCHES", "").strip().lower() != "false"
 
 
 def spotify_access_token(db: Database, http: httpx.Client, config: AppConfig) -> str:

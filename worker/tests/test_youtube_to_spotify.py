@@ -24,6 +24,7 @@ def test_videos_are_added_to_spotify(cloud):
     assert cloud.spotify_searches() == [spotify_query(GET_LUCKY.video), spotify_query(DREAMS.video)]
     assert cloud.calls("www.googleapis.com", "/youtube/v3/search") == []
     assert cloud.video_cache["lucky"]["spotify_track_id"] == GET_LUCKY.track_id
+    assert cloud.video_cache["lucky"]["source"] == "search"
     mapping = cloud.mappings[0]
     assert mapping["last_error"] is None
     assert mapping["synced_songs"] == []
