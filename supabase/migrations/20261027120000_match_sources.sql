@@ -1,15 +1,21 @@
--- Where a cached match comes from: the worker's own search, or a person who
--- corrected it. Matches can be shared with other cronchords users (see
--- "Sharing matches" in the README), and corrections count for more there,
--- since a person picked them.
+-- Where a cached match comes from: the worker's own search, a person who
+-- corrected it, or the list of matches cronchords users share (see "Sharing
+-- matches" in the README). Corrections count for more on that list, since a
+-- person picked them, and matches taken from it aren't shared again.
 
 alter table public.track_sync_cache
-  add column if not exists source text not null default 'search'
-    check (source in ('search', 'correction'));
+  add column if not exists source text not null default 'search';
+alter table public.track_sync_cache
+  drop constraint if exists track_sync_cache_source_check,
+  add constraint track_sync_cache_source_check
+    check (source in ('search', 'correction', 'shared'));
 
 alter table public.video_sync_cache
-  add column if not exists source text not null default 'search'
-    check (source in ('search', 'correction'));
+  add column if not exists source text not null default 'search';
+alter table public.video_sync_cache
+  drop constraint if exists video_sync_cache_source_check,
+  add constraint video_sync_cache_source_check
+    check (source in ('search', 'correction', 'shared'));
 
 -- The worker says itself where a match comes from: it also saves the
 -- replacements people make in two-way syncs. Anyone else writing a row, in the
