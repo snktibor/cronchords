@@ -41,3 +41,4 @@ jobs:
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          USE_SHARED_MATCHES: ${{ vars.USE_SHARED_MATCHES }}
