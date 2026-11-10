@@ -45,6 +45,8 @@ On each run the worker:
      playlist already (maybe as another release), and otherwise searches
      Spotify with the video's title, cleaned of "(Official Video)" and the
      like.
+   - Before it searches, it looks the song up in the matches other users
+     shared, see [Sharing matches](#sharing-matches).
 
    Title, artist and length have to match, and covers, live versions, remixes
    and the like only match each other.
@@ -91,8 +93,9 @@ disappearing from Spotify.
   same song in a second playlist only costs the 50 units. Removing a song from
   YouTube costs 50 units as well. Pairs that sync from YouTube also list their
   YouTube playlist on every run, which costs 1 unit per 50 videos, so about 24
-  units a day for a playlist of up to 50 songs. You can ask Google for more
-  quota if you need it.
+  units a day for a playlist of up to 50 songs. Songs found in the
+  [shared matches](#using-the-shared-matches) don't need a search either. You
+  can ask Google for more quota if you need it.
 - **Spotify.** Apps in Development Mode need an owner with Spotify Premium, and
   can only read and change playlists you own or collaborate on. Searching
   Spotify has no daily limit, so songs from YouTube aren't held back by a
@@ -322,6 +325,33 @@ only 100 searches a day. You can share the matches your worker found with
 an open list of Spotify tracks and their YouTube videos. It collects the
 matches from every fork that shares them, checks them, and publishes them for
 anyone to use. Sharing is off unless you turn it on.
+
+### Using the shared matches
+
+Before the worker searches for a song it hasn't seen yet, it looks the song up
+in that list. If the list has the song, the worker looks up the videos it
+names, which costs 1 unit of the YouTube quota instead of the 100 of a search,
+and it works after the day's searches are used up too. The other way round, it
+looks up the Spotify tracks the list has for a video instead of searching
+Spotify.
+
+The worker doesn't take a match from the list on trust. It checks it with the
+same rules as its own search results, so a wrong match someone shared doesn't
+get into your playlists. Matches that a person picked, by correcting one, only
+need the video to be titled after the song: they may be right where the rules
+are wrong. If no match from the list holds up, or the list can't be read, the
+worker searches as usual. The cache comes first, so a match you corrected
+stays yours.
+
+Matches taken from the list are marked `shared` in the cache, and they aren't
+shared again. Reading the list sends nothing about your playlists anywhere:
+the worker downloads the list's files, each covering 1/256 of the songs. To
+turn it off, add the variable `USE_SHARED_MATCHES` with the value `false`
+under Settings > Secrets and variables > Actions > Variables, or put
+`USE_SHARED_MATCHES=false` in the worker's `.env` if it runs on your own
+machine.
+
+### Sharing your matches
 
 To turn it on, add the variable `SHARE_MATCHES` with the value `true` under
 Settings > Secrets and variables > Actions > Variables. Once a day, the "Share
