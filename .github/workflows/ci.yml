@@ -47,3 +47,45 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  # Jobs can't have their own paths filter, so this one tells the site job
+  # whether site/ changed. Worker and dashboard don't wait for it.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      site: ${{ steps.filter.outputs.site }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            site:
+              - "site/**"
+              - ".github/workflows/ci.yml"
+
+  site:
+    name: Site
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

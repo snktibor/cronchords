@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1a1a19" />
+    <meta name="color-scheme" content="dark" />
+    <title>cronchords: Spotify and YouTube Music playlists, kept in sync</title>
+    <meta
+      name="description"
+      content="Keeps Spotify and YouTube Music playlists in sync, one way or both ways, on your own accounts and API keys. Free and open source."
+    />
+    <meta property="og:title" content="cronchords" />
+    <meta
+      property="og:description"
+      content="Spotify and YouTube Music playlists, kept in sync. Free, on your own accounts and keys."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://cronchords.snktibor.hu/" />
+    <meta property="og:image" content="https://cronchords.snktibor.hu/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="cronchords: Spotify and YouTube Music playlists, kept in sync." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://cronchords.snktibor.hu/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <header class="top">
+        <a class="wordmark" href="/">cronchords</a>
+        <nav class="tools" aria-label="Project links">
+          <a class="quiet" href="https://github.com/snktibor/cronchords#setup">Setup guide</a>
+          <a class="quiet" href="https://github.com/snktibor/cronchords">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            <span class="collapse">GitHub</span>
+          </a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="title">
+          <h1 id="title">Spotify and YouTube Music playlists, kept in sync.</h1>
+          <p class="caption">
+            One way or both ways, on your own accounts and API keys, for free.
+          </p>
+          <div class="actions">
+            <a class="primary" href="https://github.com/snktibor/cronchords/fork">Fork on GitHub</a>
+            <a class="quiet" href="https://github.com/snktibor/cronchords#setup">Setup guide</a>
+          </div>
+
+          <figure class="preview">
+            <div class="panel" aria-hidden="true">
+              <p class="panel-title">Active syncs</p>
+              <div class="pairs-head">
+                <span class="spotify">Spotify</span>
+                <span></span>
+                <span class="youtube">YouTube</span>
+              </div>
+              <ul>
+                <li class="pair">
+                  <span>Morning run</span>
+                  <span class="pair-arrow">→</span>
+                  <span>Morning run</span>
+                  <span class="pair-meta">
+                    <span>Synced Nov 10, 2026, 2:00 PM</span>
+                    <span class="quiet small">Stop syncing</span>
+                  </span>
+                </li>
+                <li class="pair">
+                  <span>Liked songs 2026</span>
+                  <span class="pair-arrow">↔</span>
+                  <span>Liked songs 2026</span>
+                  <span class="pair-meta">
+                    <span>Synced Nov 10, 2026, 2:00 PM</span>
+                    <span class="quiet small">Stop syncing</span>
+                  </span>
+                </li>
+                <li class="pair">
+                  <span>Road trip</span>
+                  <span class="pair-arrow">→</span>
+                  <span>Road trip</span>
+                  <span class="pair-meta">
+                    <span>Synced Nov 10, 2026, 2:00 PM</span>
+                    <span class="quiet small">Stop syncing</span>
+                  </span>
+                  <span class="status warning">
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M8 2.2 14.3 13H1.7L8 2.2Z" />
+                      <path d="M8 6.6v3" />
+                      <path d="M8 11.4v.1" />
+                    </svg>
+                    <span>Waiting for the YouTube API quota to reset</span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+            <figcaption>The dashboard with example playlists. You pair two playlists once, and the worker syncs them every hour.</figcaption>
+          </figure>
+        </section>
+
+        <section aria-labelledby="why">
+          <h2 id="why">Why cronchords</h2>
+          <dl class="facts">
+            <div>
+              <dt>Free</dt>
+              <dd>
+                The sync runs on GitHub Actions, its state is stored in a free Supabase project, and the dashboard is a static site. There is nothing to pay for.
+              </dd>
+            </div>
+            <div>
+              <dt>Your own keys</dt>
+              <dd>
+                You create the Spotify app and the Google OAuth client yourself. Your tokens stay in your own Supabase project and your own GitHub Actions runs. There is no cronchords server in between.
+              </dd>
+            </div>
+            <div>
+              <dt>Runs on its own</dt>
+              <dd>
+                It syncs every hour, and no computer of yours has to be on. If you'd rather, run it on
+                a Raspberry Pi, in Docker or as a systemd service.
+              </dd>
+            </div>
+            <div>
+              <dt>Open source</dt>
+              <dd>The code is under the MIT license, so you can fork it, run it and change it.</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section aria-labelledby="how">
+          <h2 id="how">How it works</h2>
+          <p class="lead">
+            You pair a Spotify playlist with a YouTube playlist and pick a direction. Every hour, the worker copies the changes to the other side.
+          </p>
+          <ul class="directions">
+            <li>
+              <span class="direction">
+                <span class="spotify">Spotify</span>
+                <span class="arrow" aria-hidden="true">→</span>
+                <span class="visually-hidden">to</span>
+                <span class="youtube">YouTube</span>
+              </span>
+              <span>The worker copies new songs to YouTube and never removes anything.</span>
+            </li>
+            <li>
+              <span class="direction">
+                <span class="spotify">Spotify</span>
+                <span class="arrow" aria-hidden="true">←</span>
+                <span class="visually-hidden">from</span>
+                <span class="youtube">YouTube</span>
+              </span>
+              <span>The worker copies new videos to Spotify and never removes anything.</span>
+            </li>
+            <li>
+              <span class="direction">
+                <span class="spotify">Spotify</span>
+                <span class="arrow" aria-hidden="true">↔</span>
+                <span class="visually-hidden">and</span>
+                <span class="youtube">YouTube</span>
+              </span>
+              <span>
+                The worker copies additions and removals in both directions. If you replace a wrong match in the playlist, it remembers the right one.
+              </span>
+            </li>
+          </ul>
+          <dl class="facts">
+            <div>
+              <dt>Careful matching</dt>
+              <dd>
+                Title, artist and length have to agree. Covers, live versions and remixes only match each other, and the worker prefers album uploads from Topic channels.
+              </dd>
+            </div>
+            <div>
+              <dt>Searched once</dt>
+              <dd>
+                The worker caches every match by ISRC, so it looks up each song once, however many playlists the song is on.
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section aria-labelledby="shared">
+          <h2 id="shared">The shared list</h2>
+          <p class="lead">
+            YouTube allows about 100 searches a day, and most users search for the same songs. The matches their workers find go into
+            <a href="https://github.com/snktibor/youtube-spotify-mapper">youtube-spotify-mapper</a>, an open list of Spotify tracks and their YouTube videos. Every worker checks the list before it searches.
+          </p>
+          <dl class="stats">
+            <div>
+              <dt>Searching YouTube</dt>
+              <dd class="figure">100 units</dd>
+              <dd class="note">of the 10,000 a day</dd>
+            </div>
+            <div>
+              <dt>A song from the list</dt>
+              <dd class="figure">1 unit</dd>
+              <dd class="note">and it works after the day's searches run out</dd>
+            </div>
+            <div>
+              <dt>Licence of the list</dt>
+              <dd class="figure">CC0</dd>
+              <dd class="note">use it for anything, extend it with a pull request</dd>
+            </div>
+          </dl>
+          <p class="lead">
+            Reading the list and sharing your matches are both on by default. To turn either off, set <code>USE_SHARED_MATCHES</code> or <code>SHARE_MATCHES</code> to <code>false</code>.
+          </p>
+
+          <h3>Hard to troll</h3>
+          <ul class="checks">
+            <li>The list's update job checks every pair with the same rules the worker applies to search results.</li>
+            <li>A correction made by hand needs at least two accounts that agree.</li>
+            <li>Accounts younger than 90 days don't get a vote.</li>
+            <li>Every worker checks each match it takes from the list again.</li>
+          </ul>
+          <div class="actions">
+            <a class="quiet" href="https://github.com/snktibor/youtube-spotify-mapper">Browse the shared list</a>
+          </div>
+        </section>
+
+        <section aria-labelledby="privacy">
+          <h2 id="privacy">Privacy</h2>
+          <dl class="rows">
+            <div>
+              <dt>What is shared</dt>
+              <dd>
+                Spotify track IDs, YouTube video IDs, ISRCs, and whether you corrected a match by hand. Your playlist names, and which songs are on which playlist, stay in your database.
+              </dd>
+            </div>
+            <div>
+              <dt>What is public</dt>
+              <dd>
+                The shared pairs are on a branch of your fork, so anyone can see which songs you sync.
+              </dd>
+            </div>
+            <div>
+              <dt>Turning it off</dt>
+              <dd>Set the variable <code>SHARE_MATCHES</code> to <code>false</code>.</dd>
+            </div>
+            <div>
+              <dt>Taking it back</dt>
+              <dd>
+                Delete the <code>cronchords-export</code> branch. The list drops your matches with its
+                next update.
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section aria-labelledby="limits">
+          <h2 id="limits">Limits</h2>
+          <p class="lead">Read these before you fork.</p>
+          <dl class="rows">
+            <div>
+              <dt>Spotify</dt>
+              <dd>
+                The app's owner needs Spotify Premium, and cronchords can only sync playlists you own or collaborate on.
+              </dd>
+            </div>
+            <div>
+              <dt>YouTube</dt>
+              <dd>
+                Adding a song to a YouTube playlist costs 50 of the 10,000 daily units, so about 100 new songs fit in a day. A big playlist takes a few days the first time.
+              </dd>
+            </div>
+            <div>
+              <dt>Reconnecting</dt>
+              <dd>You have to reconnect Spotify every six months. The dashboard shows when.</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section aria-labelledby="setup">
+          <h2 id="setup">Setup</h2>
+          <p class="lead">
+            Setup takes about 20 minutes. The setup guide in the README describes every step.
+          </p>
+          <ol class="steps">
+            <li><a href="https://github.com/snktibor/cronchords#1-fork-the-repository">Fork the repository</a></li>
+            <li><a href="https://github.com/snktibor/cronchords#2-create-the-supabase-project">Create a Supabase project and run the SQL migrations</a></li>
+            <li><a href="https://github.com/snktibor/cronchords#3-deploy-the-dashboard">Deploy the dashboard on Vercel, Netlify or GitHub Pages</a></li>
+            <li><a href="https://github.com/snktibor/cronchords#4-create-a-spotify-app">Create a Spotify app and a Google OAuth client</a></li>
+            <li><a href="https://github.com/snktibor/cronchords#6-connect-your-accounts">Connect your accounts and pair the playlists</a></li>
+            <li><a href="https://github.com/snktibor/cronchords#7-turn-on-the-hourly-sync">Turn on the hourly sync</a></li>
+          </ol>
+          <div class="actions">
+            <a class="quiet" href="https://github.com/snktibor/cronchords#setup">Read the setup guide</a>
+          </div>
+        </section>
+      </main>
+
+      <footer class="credit">
+        <p class="credit-links">
+          <span>Made by</span>
+          <a class="quiet" href="https://github.com/snktibor">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            snktibor
+          </a>
+          <a href="https://github.com/snktibor/cronchords">Source</a>
+          <a href="https://github.com/snktibor/youtube-spotify-mapper">Shared list</a>
+        </p>
+        <p>Not affiliated with Spotify or YouTube.</p>
+        <p>The code is under the MIT license. The cronchords name and logo are not.</p>
+      </footer>
+    </div>
+  </body>
+</html>
